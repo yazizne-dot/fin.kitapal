@@ -1,0 +1,11 @@
+data/*.sqlite*
+node_modules/
+.env
+
+# Private source workbook extraction
+data/workbook-source.json
+
+data/balance-source.json
+data/cashflow-source.json
+
+data/*.initial-access.txt
