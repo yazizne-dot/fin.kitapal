@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ledger,debts,validate} from '../accounting.mjs';
+import {ledger,debts,validate} from '../server/finance/accounting.mjs';
 const op=(kind,amount,cost=0)=>({kind,amount,cost,org:'A',counterparty:'B',document:'D',date:'2026-09-01',due:'2026-09-10'});
 test('credit sale accrues revenue and debt; payment never duplicates revenue',()=>{
  const sale=op('sale',1000,500);let a=ledger([sale]);assert.equal(a.revenue,1000);assert.equal(a.receivables,1000);assert.equal(a.cash,0);

@@ -9,3 +9,10 @@ data/balance-source.json
 data/cashflow-source.json
 
 data/*.initial-access.txt
+
+# Next.js build output and local configuration
+.next/
+out/
+*.tsbuildinfo
+.env.*
+!.env.example

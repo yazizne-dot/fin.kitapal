@@ -1,7 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {workbookDataset as w} from '../workbook-data.mjs';
-import {renderWorkbook,workbookExportRows} from '../public/workbook.js';
+import {workbookDataset as w} from '../server/finance/workbook.mjs';
 const close=(a,b)=>assert.ok(Math.abs(a-b)<.015,`${a} != ${b}`);
 test('August P&L uses original workbook totals with decimal precision',()=>{
  const d=w.report();assert.equal(d.latest,'2026-08');assert.equal(d.source,'workbook');assert.equal(d.demo,false);close(d.report.revenue,49067743.11);close(d.report.cost,23731036.19);close(d.report.gross,25336706.92);close(d.report.opex,25985301);close(d.report.profit,-5217423.746666668);assert.equal(d.refs.revenue[0].cell,'J16');assert.equal(d.refs.profit[0].cell,'J110');
@@ -29,16 +28,4 @@ test('negative return-related values and tiny source budget inputs are preserved
 });
 test('every reported metric has source provenance and missing inputs stay distinct from zero',()=>{
  const d=w.report();assert.ok(d.details.every(r=>r.sources.every(s=>s.sheet&&s.cell)));const blank=d.details.find(x=>x.group==='bonuses'&&x.label==='Ақтау фр');assert.equal(blank.value,null);assert.equal(d.report.bonuses,0);assert.ok(d.metadata.sha256.length===64);assert.throws(()=>w.report({month:'2027-01'}));assert.throws(()=>w.report({month:'2026-08',channel:'unknown'}));
-});
-test('workbook pages render for actual, future, YTD and channel scenarios',()=>{
- const root={innerHTML:''},esc=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),icon=()=>'<svg></svg>';
- for(const options of [{},{range:'ytd'},{month:'2026-09'},{channel:'Продажи_Каспи'},{month:'2023-01'}]){
-  const data={...w.report(options),user:{name:'Қаржыгер',role:'finance'}};
-  for(const page of ['dashboard','pnl','analytics','plans','operations','checks','imports','balance','cashflow','debts','settings']){
-   const state={data,page,chart:'month'};assert.doesNotThrow(()=>renderWorkbook({root,state,icon,esc}));assert.ok(!root.innerHTML.includes('NaN'),page);assert.ok(!root.innerHTML.includes('undefined'),page);assert.ok(root.innerHTML.includes('Kitapal'));
-  }
- }
-});
-test('Excel exports contain source references and preserve numbers',()=>{
- const rows=workbookExportRows({data:w.report(),page:'pnl'});assert.ok(rows.some(r=>r.includes('P&L_2026!J16')));assert.ok(rows.some(r=>r.includes(49067743.11)));assert.ok(rows.some(r=>r.includes(-5217423.746666668)));const future=workbookExportRows({data:w.report({month:'2026-09'}),page:'plans'});assert.ok(future.some(r=>r[1]==='—'));
 });
