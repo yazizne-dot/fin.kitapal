@@ -10,6 +10,20 @@ data/cashflow-source.json
 
 data/*.initial-access.txt
 
+# Private PostgreSQL export: financial data and password hashes
+data/postgres-data.sql
+data/postgres-data.manifest.json
+data/postgres-data-parts/
+data/postgres-data.*.tmp
+data/postgres-relational-data.sql
+data/postgres-relational-data.manifest.json
+data/postgres-relational-data.report.md
+data/postgres-relational-data.*.tmp
+data/postgres-relational-corrections.sql
+data/postgres-relational-corrections.report.md
+data/postgres-relational-corrections.*.tmp
+__pycache__/
+
 # Next.js build output and local configuration
 .next/
 out/
