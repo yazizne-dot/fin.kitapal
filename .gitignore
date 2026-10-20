@@ -23,6 +23,7 @@ data/postgres-relational-corrections.sql
 data/postgres-relational-corrections.report.md
 data/postgres-relational-corrections.*.tmp
 __pycache__/
+data/backups/
 
 # Next.js build output and local configuration
 .next/
