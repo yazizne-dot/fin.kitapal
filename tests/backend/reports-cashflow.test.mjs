@@ -51,5 +51,13 @@ test('cash flow excludes transfers and leaves unmapped imported money explicit',
     assert.equal(imported.rows[0].cash_account_id, null);
     assert.equal(imported.complete, false);
     assert.match(imported.warnings.join(' '), /unmapped/i);
+    await withTransaction(pool, client => saveCoverage({ client, principal, input: {
+      datasetId: ledger.id, scopeId: consolidated.id, family: 'cashflow', start: '2026-11-01',
+      end: '2026-12-01', sourceKind: 'movements',
+    } }));
+    const importedAuto = await getCashflowPeriod({ pool, principal, scopeId: consolidated.id,
+      start: '2026-11-01', end: '2026-12-01' });
+    assert.equal(importedAuto.source, 'movements');
+    assert.equal(importedAuto.totals.inflow, '25.00');
   } finally { await pool.end(); }
 });

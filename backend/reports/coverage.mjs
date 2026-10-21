@@ -51,7 +51,10 @@ export async function saveCoverage({ client, principal, input }) {
   if (!dataset) throw new FinanceError('Dataset not found', 404);
   if (input.sourceKind === 'historical' && dataset.kind !== 'imported_finance')
     throw new FinanceError('Historical coverage must use imported finance data');
-  if (input.sourceKind !== 'historical' && dataset.kind !== 'live') throw new FinanceError('Live coverage must use live dataset');
+  const importedCashMovements = input.family === 'cashflow' && input.sourceKind === 'movements' &&
+    dataset.kind === 'legacy_ledger';
+  if (input.sourceKind !== 'historical' && dataset.kind !== 'live' && !importedCashMovements)
+    throw new FinanceError('Movement or event coverage has an incompatible dataset');
   const scope = (await client.query('SELECT organization_id FROM qarzhy.report_scopes WHERE id=$1', [scopeId])).rows[0];
   if (!scope) throw new FinanceError('Report scope not found', 404);
   if (principal.organization_id && String(principal.organization_id) !== String(scope.organization_id)) throw new AccessError('Forbidden scope');
