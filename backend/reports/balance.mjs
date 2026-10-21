@@ -28,6 +28,7 @@ async function openingTotals(pool, snapshotId) {
 export async function getBalanceAt({ pool, principal, scopeId, asOf, source = 'auto' }) {
   requirePermission(principal, 'finance.read');
   const scope = await assertReportScope(pool, principal, scopeId);
+  const organizationId = (await pool.query('SELECT organization_id FROM qarzhy.report_scopes WHERE id=$1', [scope])).rows[0].organization_id;
   const date = dateOnly(asOf);
   if (!['auto', 'historical', 'opening_and_movements'].includes(source)) throw new FinanceError('Invalid balance source');
   const warnings = [];
@@ -79,8 +80,9 @@ export async function getBalanceAt({ pool, principal, scopeId, asOf, source = 'a
   const cashMovements = (await pool.query(`SELECT m.id,m.direction,m.amount::text,m.cash_account_id,
       m.organization_id,a.organization_id AS account_organization_id
     FROM qarzhy.cash_movements m LEFT JOIN qarzhy.cash_accounts a ON a.id=m.cash_account_id
-    WHERE m.dataset_id=$1 AND m.scope_id=$2 AND m.occurred_on >= $3 AND m.occurred_on < $4`,
-  [rule.dataset_id, scope, day(snapshot.as_of_date), date])).rows;
+    WHERE m.dataset_id=$1 AND ($2::bigint IS NULL OR m.organization_id=$2)
+      AND m.occurred_on >= $3 AND m.occurred_on < $4`,
+  [rule.dataset_id, organizationId, day(snapshot.as_of_date), date])).rows;
   const cashMapped = cashMovements.every(row => row.cash_account_id && row.organization_id &&
     String(row.organization_id) === String(row.account_organization_id));
   if (!cashMapped) warnings.push('Unmapped cash account or organization prevents a cash balance');
