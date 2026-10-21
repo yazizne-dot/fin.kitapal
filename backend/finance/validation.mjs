@@ -34,6 +34,8 @@ export function id(value, label = 'ID') {
 }
 
 export async function assertOpenPeriod(client, organizationId, occurredOn) {
+  const month = `${dateOnly(occurredOn).slice(0, 7)}-01`;
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`period:${organizationId}:${month}`]);
   const result = await client.query(`SELECT closed FROM qarzhy.accounting_periods
     WHERE organization_id=$1 AND starts_on=date_trunc('month',$2::date)::date FOR UPDATE`, [organizationId, occurredOn]);
   if (result.rows[0]?.closed) throw new FinanceError('Closed period', 409);

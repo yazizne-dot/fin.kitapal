@@ -4,6 +4,7 @@ import pg from 'pg';
 import { assertTestDatabaseUrl } from './helpers/test-db.mjs';
 import { withTransaction } from '../../backend/db/connection.mjs';
 import { savePlan, saveBudgetItem, setPeriodClosed } from '../../backend/finance/planning.mjs';
+import { assertOpenPeriod } from '../../backend/finance/validation.mjs';
 
 test('plans and budgets are separate from facts and reject changes in closed periods', { skip: !process.env.TEST_DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: assertTestDatabaseUrl(process.env.TEST_DATABASE_URL) });
@@ -39,4 +40,34 @@ test('plans and budgets are separate from facts and reject changes in closed per
       month: '2026-12', closed: false, reason: 'Correction approved' }));
     assert.equal((await pool.query("SELECT closed FROM qarzhy.accounting_periods WHERE organization_id=$1 AND starts_on='2026-12-01'", [org.id])).rows[0].closed, false);
   } finally { await pool.end(); }
+});
+
+test('closing an absent period waits for a writer checking that month', { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const pool = new pg.Pool({ connectionString: assertTestDatabaseUrl(process.env.TEST_DATABASE_URL) });
+  const first = await pool.connect(), second = await pool.connect();
+  let closing;
+  try {
+    const org = (await pool.query("INSERT INTO qarzhy.organizations(code,name) VALUES('period_lock_org','Period Lock Org') RETURNING id")).rows[0];
+    const user = (await pool.query(`INSERT INTO qarzhy.users(username,name,role_id,password_salt,password_hash)
+      VALUES('periodlockfinance','Period Lock Finance',(SELECT id FROM qarzhy.roles WHERE code='finance'),$1,$2) RETURNING id`,
+      ['0'.repeat(32), '0'.repeat(128)])).rows[0];
+    const principal = { id: user.id, name: 'Period Lock Finance', permissions: ['finance.write'] };
+    await first.query('BEGIN');
+    await second.query('BEGIN');
+    await assertOpenPeriod(first, org.id, '2026-09-15');
+    closing = setPeriodClosed({ client: second, principal, organizationId: org.id,
+      month: '2026-09', closed: true, reason: 'Close after pending writer' });
+    const state = await Promise.race([closing.then(() => 'closed'),
+      new Promise(resolve => setTimeout(() => resolve('waiting'), 100))]);
+    assert.equal(state, 'waiting');
+    await first.query('COMMIT');
+    await closing;
+    await second.query('COMMIT');
+    await assert.rejects(withTransaction(pool, client => assertOpenPeriod(client, org.id, '2026-09-15')), /closed period/i);
+  } finally {
+    await first.query('ROLLBACK').catch(() => {});
+    await closing?.catch(() => {});
+    await second.query('ROLLBACK').catch(() => {});
+    first.release(); second.release(); await pool.end();
+  }
 });
