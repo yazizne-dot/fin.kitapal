@@ -34,9 +34,12 @@ Development integration tests require `TEST_DATABASE_URL` ending in `/fin_test`;
 | `GET/POST /api/reports/coverage` | Inspect report-family source intervals and configure cutover |
 | `POST /api/reports/opening-snapshot/verify` | Verify an opening balance before balance cutover |
 | `GET /api/reports/pnl` | Read one P&L period from the selected historical series or live events; `source=auto` requires one complete coverage interval |
+| `GET /api/reports/cashflow` | Read cash movements from coverage-selected live data or the legacy PostgreSQL dataset; internal transfers are excluded from external flow totals |
 | `GET/POST /api/reports/figures`, `POST /api/reports/figures/reset` | List, set, and reset individual effective report figures with a revision and reason |
 
 `GET /api/reports/pnl` accepts `scope_id`, `start`, `end`, optional `kind=monthly|source_ytd`, and optional `source=auto|historical|events`. It returns `figures`, source rows, coverage, and warnings. Missing historical inputs stay null; `source_ytd` is read from its own PostgreSQL rows and is never silently reconstructed from monthly rows. An input correction recalculates gross, operating, net, and retained profit with decimal arithmetic. Explicit derived-number corrections take precedence and expose a reconciliation difference. The edit changes only `report_overrides`; original history, documents, events, and cash movements remain intact.
+
+`GET /api/reports/cashflow` accepts `scope_id`, `start`, `end`, and `source=auto|historical|movements|ledger`. Its live and ledger totals use exact decimals and omit paired internal transfers. Imported movements with unknown organization or cash account retain null references and an explicit warning. Historical cash-flow rows can be read, but aggregate totals remain null until the source metric mapping is completed.
 
 All report reads and writes enforce the caller's organization scope. Mutations require the same cookie, Origin, and CSRF checks as account routes. Migration `0004_report_overrides.sql` adds the effective override key and append-only history. Neither `0003` nor `0004` is applied automatically to the populated database.
 
