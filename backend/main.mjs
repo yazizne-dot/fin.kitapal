@@ -3,6 +3,7 @@ import { startApi } from './http/server.mjs';
 import { registerAccountRoutes } from './http/account-routes.mjs';
 import { registerFinanceRoutes } from './http/finance-routes.mjs';
 import { registerReportRoutes } from './http/report-routes.mjs';
+import { registerPortalRoutes } from './http/portal-routes.mjs';
 
 const pool = createPool({ connectionString: process.env.DATABASE_URL });
 const port = Number(process.env.API_PORT || 3139);
@@ -12,6 +13,7 @@ const server = await startApi({ pool, port, host, registerRoutes: router => {
   registerAccountRoutes(router, services);
   registerFinanceRoutes(router, services);
   registerReportRoutes(router, services);
+  registerPortalRoutes(router, services);
 } });
 console.info(`API listening on ${host}:${server.address().port}`);
 

@@ -1,6 +1,44 @@
 import { requirePermission, AccessError } from '../auth/guards.mjs';
-import { FinanceError, money, dateOnly, id, assertOpenPeriod } from './validation.mjs';
+import { Exact, FinanceError, money, dateOnly, id, assertOpenPeriod } from './validation.mjs';
 import { audit } from './audit.mjs';
+
+export const EXPENSE_CATEGORIES = [
+  'Кеңсе / Офис', 'Жол / Транспорт', 'Тамақ / Питание',
+  'Іссапар / Командировка', 'Сатып алу / Покупка', 'Басқа / Прочее',
+];
+
+export async function listExpenseCategories(pool, principal) {
+  const reviewer = principal.permissions?.includes('expenses.review') ?? false;
+  return (await pool.query(`SELECT DISTINCT a.name FROM qarzhy.financial_articles a
+    WHERE a.active=true AND (a.name=ANY($1::text[]) OR EXISTS
+      (SELECT 1 FROM qarzhy.employee_expenses e WHERE e.article_id=a.id AND e.deleted_at IS NULL
+        AND ($2::boolean OR e.user_id=$3)))
+    ORDER BY a.name LIMIT 500`, [EXPENSE_CATEGORIES, reviewer, principal.id])).rows.map(row => row.name);
+}
+
+function expenseAmount(input) {
+  if (input.amount !== undefined) return money(input.amount, { allowZero: false });
+  if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents <= 0 || input.amount_cents > 1_000_000_000_000)
+    throw new FinanceError('Invalid expense amount');
+  return money(new Exact(input.amount_cents).div(100).toFixed(2), { allowZero: false });
+}
+
+async function expenseArticle(client, input) {
+  if (input.articleId !== undefined) return id(input.articleId, 'article ID');
+  if (typeof input.category !== 'string' || !input.category.trim() || input.category.length > 200)
+    throw new FinanceError('Invalid expense category');
+  let rows = (await client.query('SELECT id FROM qarzhy.financial_articles WHERE name=$1 AND active=true LIMIT 2',
+    [input.category])).rows;
+  if (!rows.length && EXPENSE_CATEGORIES.includes(input.category)) {
+    const code = `portal_expense_${EXPENSE_CATEGORIES.indexOf(input.category) + 1}`;
+    await client.query(`INSERT INTO qarzhy.financial_articles(code,name) VALUES($1,$2)
+      ON CONFLICT(code) DO NOTHING`, [code, input.category]);
+    rows = (await client.query('SELECT id FROM qarzhy.financial_articles WHERE name=$1 AND active=true LIMIT 2',
+      [input.category])).rows;
+  }
+  if (rows.length !== 1) throw new FinanceError(rows.length ? 'Ambiguous expense category' : 'Expense category not found');
+  return rows[0].id;
+}
 
 export async function createExpense({ client, principal, input }) {
   const owns = principal.permissions?.includes('expenses.own');
@@ -8,9 +46,9 @@ export async function createExpense({ client, principal, input }) {
   if (principal.password_change_due) throw new AccessError('Password change required');
   const userId = owns ? principal.id : id(input.userId ?? principal.id, 'user ID');
   const organizationId = principal.organization_id || (owns ? null : input.organizationId);
-  const articleId = id(input.articleId, 'article ID');
+  const articleId = await expenseArticle(client, input);
   const occurredOn = dateOnly(input.date);
-  const amount = money(input.amount, { allowZero: false });
+  const amount = expenseAmount(input);
   if (typeof input.description !== 'string' || !input.description.trim() || input.description.length > 2000)
     throw new FinanceError('Invalid expense description');
   if (organizationId) await assertOpenPeriod(client, organizationId, occurredOn);
@@ -21,6 +59,42 @@ export async function createExpense({ client, principal, input }) {
   await audit(client, principal, 'expense_create', 'employee_expense', expense.id,
     { after: { user_id: userId, amount, status: 'submitted' } });
   return expense;
+}
+
+export async function updateExpense({ client, principal, input }) {
+  requirePermission(principal, 'expenses.own');
+  const expense = (await client.query('SELECT * FROM qarzhy.employee_expenses WHERE id=$1 FOR UPDATE',
+    [id(input.id, 'expense ID')])).rows[0];
+  if (!expense || expense.deleted_at) throw new FinanceError('Expense not found', 404);
+  if (String(expense.user_id) !== String(principal.id)) throw new AccessError('Forbidden');
+  if (expense.status === 'approved') throw new FinanceError('Approved expense cannot be edited', 409);
+  if (Number(expense.version) !== Number(input.version)) throw new FinanceError('Expense version conflict', 409);
+  const date = dateOnly(input.date), amount = expenseAmount(input), articleId = await expenseArticle(client, input);
+  if (typeof input.description !== 'string' || !input.description.trim() || input.description.length > 2000)
+    throw new FinanceError('Invalid expense description');
+  if (expense.organization_id) await assertOpenPeriod(client, expense.organization_id, date);
+  const updated = (await client.query(`UPDATE qarzhy.employee_expenses SET occurred_on=$2,amount=$3,article_id=$4,
+    description=$5,vendor_label=$6,status='submitted',reviewed_by=NULL,reviewed_at=NULL,
+    updated_at=now(),version=version+1 WHERE id=$1 RETURNING *`, [expense.id, date, amount, articleId,
+    input.description.trim(), String(input.vendor ?? '').slice(0, 200)])).rows[0];
+  await audit(client, principal, 'expense_update', 'employee_expense', expense.id,
+    { before: { amount: expense.amount, status: expense.status }, after: { amount, status: 'submitted' } });
+  return updated;
+}
+
+export async function deleteExpense({ client, principal, id: expenseId, version }) {
+  requirePermission(principal, 'expenses.own');
+  const expense = (await client.query('SELECT * FROM qarzhy.employee_expenses WHERE id=$1 FOR UPDATE',
+    [id(expenseId, 'expense ID')])).rows[0];
+  if (!expense || expense.deleted_at) throw new FinanceError('Expense not found', 404);
+  if (String(expense.user_id) !== String(principal.id)) throw new AccessError('Forbidden');
+  if (expense.status === 'approved') throw new FinanceError('Approved expense cannot be deleted', 409);
+  if (Number(expense.version) !== Number(version)) throw new FinanceError('Expense version conflict', 409);
+  const deleted = (await client.query(`UPDATE qarzhy.employee_expenses SET deleted_at=now(),updated_at=now(),
+    version=version+1 WHERE id=$1 RETURNING *`, [expense.id])).rows[0];
+  await audit(client, principal, 'expense_delete', 'employee_expense', expense.id,
+    { before: { amount: expense.amount, status: expense.status } });
+  return deleted;
 }
 
 export async function reviewExpense({ client, principal, id: expenseId, version, decision, note = '' }) {
@@ -66,10 +140,12 @@ export async function listExpenses({ pool, principal, filters = {} }) {
   if (principal.organization_id) { params.push(principal.organization_id); where.push(`e.organization_id=$${params.length}`); }
   if (filters.status) { params.push(filters.status); where.push(`e.status=$${params.length}`); }
   const rows = (await pool.query(`SELECT e.id,e.user_id,u.name AS user_name,e.organization_id,e.article_id,
-    e.occurred_on,e.amount::text,e.description,e.vendor_label,e.status,e.version,
+    e.occurred_on::text AS date,e.amount::text,(e.amount*100)::bigint AS amount_cents,
+    a.name AS category,e.description,e.vendor_label AS vendor,e.status,e.version,
     coalesce(r.note,'') AS review_note FROM qarzhy.employee_expenses e
     JOIN qarzhy.users u ON u.id=e.user_id
+    JOIN qarzhy.financial_articles a ON a.id=e.article_id
     LEFT JOIN LATERAL (SELECT note FROM qarzhy.expense_reviews WHERE expense_id=e.id ORDER BY reviewed_at DESC LIMIT 1) r ON true
     WHERE ${where.join(' AND ')} ORDER BY e.occurred_on DESC,e.id DESC LIMIT 500`, params)).rows;
-  return rows;
+  return rows.map(row => ({ ...row, amount_cents: Number(row.amount_cents) }));
 }

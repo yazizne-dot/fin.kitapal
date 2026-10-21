@@ -39,7 +39,7 @@ export async function readJson(request) {
   } catch { throw new AccessError('Invalid JSON body', 400); }
 }
 
-function userJson(principal) {
+export function userJson(principal) {
   return {
     id: Number(principal.id),
     name: principal.name,

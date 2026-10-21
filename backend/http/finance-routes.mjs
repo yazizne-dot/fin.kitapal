@@ -6,7 +6,7 @@ import { sendJson } from './response.mjs';
 import { withTransaction } from '../db/connection.mjs';
 import { createDocument, postDocument, reverseDocument, listOperations } from '../finance/documents.mjs';
 import { recordMovement, settleDocument, listMovements } from '../finance/movements.mjs';
-import { createExpense, reviewExpense, listExpenses } from '../finance/expenses.mjs';
+import { createExpense, reviewExpense, listExpenses, listExpenseCategories, updateExpense, deleteExpense } from '../finance/expenses.mjs';
 import { savePlan, saveBudgetItem, setPeriodClosed, listPlanning } from '../finance/planning.mjs';
 
 export function registerFinanceRoutes(router, { pool, publicOrigin, csrfSecret }) {
@@ -59,13 +59,24 @@ export function registerFinanceRoutes(router, { pool, publicOrigin, csrfSecret }
 
   route('POST', '/api/expenses', 'expenses.own', async ({ client, principal, input }) =>
     ({ expense: await createExpense({ client, principal, input }) }), 201);
-  route('PATCH', '/api/expenses', 'expenses.review', async ({ client, principal, input }) =>
-    ({ expense: await reviewExpense({ client, principal, id: input.id, version: input.version,
-      decision: input.decision, note: input.note }) }));
+  router.add('PATCH', '/api/expenses', async ({ request, response, requestId }) => {
+    const principal = await principalFor(request);
+    checkMutationRequest(request, { ...principal, token: readCookie(request) }, security);
+    const input = await readJson(request);
+    const result = await withTransaction(pool, async client => {
+      if (input.action === 'delete') return deleteExpense({ client, principal, id: input.id, version: input.version });
+      if (input.action === 'review' || input.decision)
+        return reviewExpense({ client, principal, id: input.id, version: input.version,
+          decision: input.decision ?? input.status, note: input.note });
+      return updateExpense({ client, principal, input });
+    });
+    sendJson(response, 200, { ok: true, expense: result }, requestId);
+  });
   router.add('GET', '/api/expenses', async ({ request, response, requestId }) => {
     const principal = await principalFor(request);
     const expenses = await listExpenses({ pool, principal });
-    sendJson(response, 200, { expenses }, requestId);
+    const categories = await listExpenseCategories(pool, principal);
+    sendJson(response, 200, { expenses, categories }, requestId);
   });
 
   route('POST', '/api/plans', 'finance.write', async ({ client, principal, input }) =>

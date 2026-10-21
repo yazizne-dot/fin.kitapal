@@ -209,7 +209,7 @@ export function ExpensesView({ page, api, refresh }: ManagementProps) {
                         <div className="row-actions">
                           {management ? (
                             <>
-                              {row.status !== "approved" && (
+                              {row.status === "submitted" && (
                                 <button
                                   className="secondary"
                                   data-admin="review"
@@ -222,7 +222,7 @@ export function ExpensesView({ page, api, refresh }: ManagementProps) {
                                   Есепке қосу
                                 </button>
                               )}
-                              {row.status !== "rejected" && (
+                              {row.status === "submitted" && (
                                 <button
                                   className="link-button"
                                   data-admin="review"
