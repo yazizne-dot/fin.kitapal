@@ -32,6 +32,7 @@ Development integration tests require `TEST_DATABASE_URL` ending in `/fin_test`;
 | `GET/POST/PATCH /api/expenses` | Employee expenses, owner edit/delete, and finance review; existing UI cents/category fields map to exact PostgreSQL money/article IDs |
 | `GET /api/data` | Employee personal view, or a finance P&L view for one covered month; other finance sections are still incomplete |
 | `GET /api/finance/audit` | Last 100 audit actions for accounts-management permission; displays actor/action/reason without raw before/after JSON |
+| `POST /api/export` | Download the currently displayed report rows as XLSX; requires finance session, exact Origin and session CSRF token |
 | `GET/POST /api/plans`, `POST /api/budget/items`, `POST /api/period` | Plans, budgets, and period closure |
 | `GET/POST /api/reports/coverage` | Inspect report-family source intervals and configure cutover |
 | `POST /api/reports/opening-snapshot/verify` | Verify an opening balance before balance cutover |
@@ -55,5 +56,7 @@ Consolidated live P&L, cash flow, and balance aggregate facts recorded under the
 Because the imported cash-flow workbook's `База` rows were migrated into `legacy_ledger.cash_movements`, a cash-flow coverage rule may select that dataset with `source_kind=movements`. This does not combine it with live movements; each interval selects one dataset.
 
 All report reads and writes enforce the caller's organization scope. Mutations require the same cookie, Origin, and CSRF checks as account routes. Migration `0004_report_overrides.sql` adds the effective override key and append-only history. Neither `0003` nor `0004` is applied automatically to the populated database.
+
+The XLSX download preserves the existing report button and workbook format. The client sends its displayed rows after obtaining a session CSRF token; the Node API validates row/cell types and size, and the writer encodes text cells as strings so formula-like labels are not executed. This route does not read SQLite or Excel source data.
 
 The Next.js UI still uses the existing SQLite-backed handler when `API_INTERNAL_URL` is unset, while complete balance reconciliation, sales, import, export, and full `/api/data` compatibility routes are being implemented. Do not enable the proxy for normal UI use yet; the report and finance endpoints above can be exercised directly in the isolated test environment. The proxy forwards method, query, selected browser security headers, cookie, request body, response cookie, content type, download disposition and binary body; every response is no-store. It accepts only a loopback HTTP backend origin.

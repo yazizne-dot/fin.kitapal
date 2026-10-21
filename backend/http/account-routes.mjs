@@ -23,13 +23,13 @@ function clearedCookie(origin) {
   return `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${origin.startsWith('https://') ? '; Secure' : ''}`;
 }
 
-export async function readJson(request) {
+export async function readJson(request, maxBytes = 65_536) {
   if (!/^application\/json(?:;|$)/i.test(request.headers['content-type'] || '')) throw new AccessError('Expected JSON body', 415);
   let size = 0;
   const chunks = [];
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 65_536) throw new AccessError('Request body is too large', 413);
+    if (size > maxBytes) throw new AccessError('Request body is too large', 413);
     chunks.push(chunk);
   }
   try {

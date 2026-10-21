@@ -8,9 +8,13 @@ export function downloadFile(content: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export async function exportRows(rows: ExportCell[][], filename: string) {
+  const tokenResponse = await fetch("/api/csrf", { cache: "no-store" });
+  if (!tokenResponse.ok) throw Error("Қауіпсіздік токенін алу мүмкін болмады");
+  const { csrf_token } = await tokenResponse.json() as { csrf_token: string };
   const response = await fetch("/api/export", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf_token },
+    cache: "no-store",
     body: JSON.stringify({ rows }),
   });
   if (!response.ok) {
