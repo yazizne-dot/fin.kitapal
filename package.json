@@ -10,13 +10,18 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --test tests/*.test.mjs && npm run test:components",
     "test:next": "node --test tests/next/*.test.mjs",
-    "test:components": "node --import tsx --test tests/react/*.test.tsx features/workbook/*.test.mjs"
+    "test:components": "node --import tsx --test tests/react/*.test.tsx features/workbook/*.test.mjs",
+    "test:backend": "node scripts/run-backend-tests.mjs",
+    "db:migrate": "node scripts/migrate-postgres.mjs",
+    "api:dev": "node --watch backend/main.mjs",
+    "api:start": "node backend/main.mjs"
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "dependencies": {
     "next": "16.3.7",
+    "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
