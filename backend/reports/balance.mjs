@@ -25,6 +25,40 @@ async function openingTotals(pool, snapshotId) {
   };
 }
 
+async function debtChanges(pool, { datasetId, organizationId, start, end }) {
+  const params = [datasetId, organizationId, start, end];
+  const [events, payments, unresolved] = await Promise.all([
+    pool.query(`SELECT d.kind,e.amount::text FROM qarzhy.financial_events e
+      JOIN qarzhy.documents d ON d.id=e.document_id AND d.dataset_id=e.dataset_id
+      WHERE e.dataset_id=$1 AND ($2::bigint IS NULL OR e.organization_id=$2)
+        AND e.occurred_on >= $3 AND e.occurred_on < $4`, params),
+    pool.query(`SELECT d.kind,s.amount::text FROM qarzhy.document_settlements s
+      JOIN qarzhy.documents d ON d.id=s.document_id
+      JOIN qarzhy.cash_movements m ON m.id=s.cash_movement_id
+      WHERE d.dataset_id=$1 AND m.dataset_id=$1 AND ($2::bigint IS NULL OR d.organization_id=$2)
+        AND m.occurred_on >= $3 AND m.occurred_on < $4`, params),
+    pool.query(`SELECT count(*)::int AS n FROM (
+      SELECT m.id FROM qarzhy.cash_movements m
+      LEFT JOIN qarzhy.document_settlements s ON s.cash_movement_id=m.id
+      WHERE m.dataset_id=$1 AND ($2::bigint IS NULL OR m.organization_id=$2)
+        AND m.occurred_on >= $3 AND m.occurred_on < $4 AND m.counterparty_id IS NOT NULL
+      GROUP BY m.id HAVING m.amount<>coalesce(sum(s.amount),0)
+    ) unresolved`, params),
+  ]);
+  let receivable = new Exact(0), payable = new Exact(0);
+  for (const row of events.rows) {
+    if (row.kind === 'sale') receivable = receivable.plus(row.amount);
+    else if (row.kind === 'purchase_return') receivable = receivable.minus(row.amount);
+    else if (row.kind === 'purchase') payable = payable.plus(row.amount);
+    else if (row.kind === 'sale_return') payable = payable.minus(row.amount);
+  }
+  for (const row of payments.rows) {
+    if (row.kind === 'sale' || row.kind === 'purchase_return') receivable = receivable.minus(row.amount);
+    else payable = payable.minus(row.amount);
+  }
+  return { receivable, payable, unresolved: unresolved.rows[0].n };
+}
+
 export async function getBalanceAt({ pool, principal, scopeId, asOf, source = 'auto' }) {
   requirePermission(principal, 'finance.read');
   const scope = await assertReportScope(pool, principal, scopeId);
@@ -92,14 +126,23 @@ export async function getBalanceAt({ pool, principal, scopeId, asOf, source = 'a
     for (const row of cashMovements) value = row.direction === 'in' ? value.plus(row.amount) : value.minus(row.amount);
     totals.cash = amount(value);
   } else totals.cash = null;
-  for (const key of ['cash', 'receivable', 'payable', 'inventory', 'otherAssets'])
-    if (totals[key] === null) warnings.push(`Opening ${key} balance is missing`);
-  // Opening non-cash amounts are shown as source facts, but are not current balances until
-  // document settlements, inventory changes and asset movements are reconciled.
   if (day(snapshot.as_of_date) !== date) {
-    for (const key of ['receivable', 'payable', 'inventory', 'otherAssets']) totals[key] = null;
-    warnings.push('Non-cash balances require document, inventory and asset reconciliation');
+    const debts = await debtChanges(pool, { datasetId: rule.dataset_id, organizationId,
+      start: day(snapshot.as_of_date), end: date });
+    if (debts.unresolved) {
+      totals.receivable = null;
+      totals.payable = null;
+      warnings.push('Unallocated counterparty cash movement prevents a verified debt balance');
+    } else {
+      if (opening.receivable !== null) totals.receivable = amount(new Exact(opening.receivable).plus(debts.receivable));
+      if (opening.payable !== null) totals.payable = amount(new Exact(opening.payable).plus(debts.payable));
+    }
+    totals.inventory = null;
+    totals.otherAssets = null;
+    warnings.push('Inventory and other assets require movement reconciliation');
   }
+  for (const key of ['cash', 'receivable', 'payable', 'inventory', 'otherAssets'])
+    if (totals[key] === null) warnings.push(`Current ${key} balance is missing`);
   if (['cash', 'receivable', 'inventory', 'otherAssets'].every(key => totals[key] !== null))
     totals.assets = amount(new Exact(totals.cash).plus(totals.receivable).plus(totals.inventory).plus(totals.otherAssets));
   else totals.assets = null;
