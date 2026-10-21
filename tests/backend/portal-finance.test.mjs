@@ -69,6 +69,25 @@ test('finance portal P&L uses effective PostgreSQL figures and reports missing c
     assert.equal(corrected.report.revenue, 120.10);
     assert.equal(corrected.report.profit, 90.05);
     assert.equal((await pool.query("SELECT sum(amount)::text AS value FROM qarzhy.financial_events WHERE posting_key='portal-finance-revenue'")).rows[0].value, '100.10');
+    await pool.query(`INSERT INTO qarzhy.coverage_rules(dataset_id,scope_id,report_family,starts_on,ends_on,source_kind)
+      VALUES($1,$2,'budget','2031-04-01','2031-05-01','budget')`, [dataset.id, scope.id]);
+    const version = (await pool.query(`INSERT INTO qarzhy.budget_versions(scope_id,year,name,status,approved_by,approved_at)
+      VALUES($1,2031,'Approved plan','approved',$2,now()) RETURNING id`, [scope.id, financeUser.id])).rows[0];
+    await pool.query(`INSERT INTO qarzhy.budget_items(budget_version_id,month,metric_id,amount)
+      VALUES($1,'2031-04-01',(SELECT id FROM qarzhy.report_metrics WHERE code='live.pnl.opex'),20.00)`, [version.id]);
+    const article = (await pool.query("INSERT INTO qarzhy.financial_articles(code,name) VALUES('portal_budget_article','Budget Article') RETURNING id")).rows[0];
+    await pool.query(`INSERT INTO qarzhy.budget_items(budget_version_id,month,metric_id,article_id,amount)
+      VALUES($1,'2031-04-01',(SELECT id FROM qarzhy.report_metrics WHERE code='live.pnl.opex'),$2,5.00)`,
+    [version.id, article.id]);
+    await pool.query(`INSERT INTO qarzhy.budget_versions(scope_id,year,name,status)
+      VALUES($1,2031,'Unapproved changes','draft')`, [scope.id]);
+    const budgeted = await buildPortalFinanceData({ pool, principal, filters: { month: '2031-04' } });
+    const opexBudget = budgeted.budgetRows.find(row => row.label === 'ИТОГО ОПЕРАЦИОННЫЕ РАСХОДЫ');
+    assert.equal(opexBudget.plan, 20);
+    assert.equal(opexBudget.actual, 0);
+    assert.equal(budgeted.budgetTimeline[0].plan, 20);
+    assert.equal(budgeted.budgetRows.find(row => row.label.includes('Budget Article')).actual, null);
+    assert.match(budgeted.checks.map(row => row.title).join(' '), /matching rule/i);
     const origin = 'http://127.0.0.1:3000';
     const api = await startApi({ pool, port: 0, registerRoutes: router => {
       registerAccountRoutes(router, { pool, publicOrigin: origin, csrfSecret: 'portal-finance-test-secret-32bytes' });

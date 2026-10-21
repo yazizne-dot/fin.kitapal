@@ -3,6 +3,7 @@ import { FinanceError } from '../finance/validation.mjs';
 import { getPnlPeriod } from './pnl.mjs';
 import { getCashflowPeriod } from './cashflow.mjs';
 import { getBalanceAt } from './balance.mjs';
+import { getBudgetPeriod } from './planning.mjs';
 
 const METRICS = ['revenue', 'cost', 'gross', 'opex', 'operatingProfit', 'otherExpense',
   'taxes', 'bonuses', 'otherIncome', 'profit', 'dividends', 'retained'];
@@ -99,6 +100,7 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
     getCashflowPeriod({ pool, principal, scopeId: scope.id, start, end }),
   ]);
   const report = Object.fromEntries(METRICS.map(key => [key, display(pnl.figures[key])]));
+  const budget = await getBudgetPeriod({ pool, principal, scopeId: scope.id, start, end, pnl });
   const details = pnl.rows.filter(row => row.key && row.value !== undefined).map(row => {
     const source = { sheet: 'qarzhy.report_metrics', cell: String(row.metric_id), period: month,
       value: display(row.original), raw: row.original };
@@ -108,7 +110,7 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
   const refs = {};
   for (const row of details) (refs[row.group] ??= []).push(...row.sources);
   const checks = [...pnl.warnings, ...balance.warnings, ...cashflow.warnings,
-    'Sales and budget projections are still incomplete']
+    ...budget.warnings, 'Sales projection is still incomplete']
     .map((warning, index) => ({ id: `coverage-${index}`, period: month, kind: 'coverage',
       title: warning, reported: null, calculated: null, difference: null,
       sheet: 'qarzhy.coverage_rules', cell: '', detail: warning }));
@@ -125,7 +127,7 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
     month, range: 'month', aggregation: 'PostgreSQL', channel: '', periods: [month], latest: month,
     actualThrough: actualAvailable ? month : null, actualAvailable, report, recalculated: null,
     previous: null, details, refs, channels: [], history: actualAvailable ? [{ month, ...report }] : [],
-    budgetRows: [], budgetTimeline: [], checks, allCheckCount: checks.length,
+    budgetRows: budget.rows, budgetTimeline: budget.timeline, checks, allCheckCount: checks.length,
     metadata: { file: 'PostgreSQL qarzhy', method: 'Relational finance reports', unit: 'KZT',
       limitations: checks.map(row => row.title) }, statements: { balance: presentBalance(balance),
       cashflow: presentCashflow(cashflow, balance, month) },
