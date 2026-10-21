@@ -97,3 +97,38 @@ test('P&L chooses historical or live coverage once and keeps source YTD separate
     assert.equal(gap.figures.profit, null);
   } finally { await pool.end(); }
 });
+
+test('live P&L includes sale cost and reverses revenue and cost for sale returns', { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const pool = new pg.Pool({ connectionString: assertTestDatabaseUrl(process.env.TEST_DATABASE_URL) });
+  try {
+    const org = (await pool.query("INSERT INTO qarzhy.organizations(code,name) VALUES('pnl_returns_org','P&L Returns Org') RETURNING id")).rows[0];
+    const scope = (await pool.query("INSERT INTO qarzhy.report_scopes(scope_type,organization_id) VALUES('organization',$1) RETURNING id", [org.id])).rows[0];
+    const dataset = (await pool.query("SELECT id FROM qarzhy.datasets WHERE kind='live'")).rows[0];
+    const counterparty = (await pool.query("INSERT INTO qarzhy.counterparties(name) VALUES('P&L Returns Counterparty') RETURNING id")).rows[0];
+    async function event(kind, amount, cogs, key) {
+      const document = (await pool.query(`INSERT INTO qarzhy.documents
+        (dataset_id,organization_id,counterparty_id,kind,input_mode,number,document_date,status,total_amount,cogs_amount,idempotency_key)
+        VALUES($1,$2,$3,$4,'summary',$5,'2032-02-10','posted',$6,$7,$5) RETURNING id`,
+      [dataset.id, org.id, counterparty.id, kind, key, String(Math.abs(Number(amount))), cogs === null ? null : String(Math.abs(Number(cogs)))] )).rows[0];
+      const posted = (await pool.query(`INSERT INTO qarzhy.financial_events
+        (dataset_id,scope_id,organization_id,occurred_on,event_kind,document_id,amount,cost_amount,posting_key)
+        VALUES($1,$2,$3,'2032-02-10',$4,$5,$6,$7,$8) RETURNING id`, [dataset.id, scope.id, org.id,
+        kind === 'sale' ? 'revenue' : 'return', document.id, amount, cogs, `pnl-${key}`])).rows[0];
+      return { document, posted };
+    }
+    await event('sale', '100.00', '40.00', 'sale');
+    await event('sale_return', '-20.00', '-8.00', 'sale-return');
+    await event('purchase_return', '-10.00', null, 'purchase-return');
+    const reversed = await event('sale', '50.00', '20.00', 'reversed-sale');
+    await pool.query(`INSERT INTO qarzhy.financial_events
+      (dataset_id,scope_id,organization_id,occurred_on,event_kind,document_id,amount,cost_amount,reverses_event_id,posting_key)
+      VALUES($1,$2,$3,'2032-02-20','revenue',$4,-50,-20,$5,'pnl-reversed-sale-compensation')`,
+    [dataset.id, scope.id, org.id, reversed.document.id, reversed.posted.id]);
+    const result = await getPnlPeriod({ pool, principal: { id: '1', permissions: ['finance.read'] },
+      scopeId: scope.id, start: '2032-02-01', end: '2032-03-01', source: 'events' });
+    assert.equal(result.figures.revenue, '80.00');
+    assert.equal(result.figures.cost, '32.00');
+    assert.equal(result.figures.gross, '48.00');
+    assert.equal(result.figures.profit, '48.00');
+  } finally { await pool.end(); }
+});

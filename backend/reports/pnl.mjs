@@ -114,11 +114,25 @@ export async function getPnlPeriod({ pool, principal, scopeId, start, end, perio
     if (missing.length) warnings.push(`Missing historical P&L figures: ${missing.join(', ')}`);
   } else if (selected === 'events') {
     if (periodKind !== 'monthly') throw new FinanceError('Live events cannot supply source YTD');
-    const events = (await pool.query(`SELECT event_kind,amount::text FROM qarzhy.financial_events
-      WHERE dataset_id=$1 AND ($2::bigint IS NULL OR organization_id=$2)
-        AND occurred_on >= $3 AND occurred_on < $4`,
+    const events = (await pool.query(`SELECT e.id,e.event_kind,e.amount::text,e.cost_amount::text,
+      d.kind AS document_kind FROM qarzhy.financial_events e
+      LEFT JOIN qarzhy.documents d ON d.id=e.document_id AND d.dataset_id=e.dataset_id
+      WHERE e.dataset_id=$1 AND ($2::bigint IS NULL OR e.organization_id=$2)
+        AND e.occurred_on >= $3 AND e.occurred_on < $4`,
     [datasetId, scopeRow.organization_id, from, to])).rows;
-    for (const key of INPUTS) base[key] = sum(events.filter(row => EVENT_KEYS[row.event_kind] === key).map(row => row.amount));
+    const amounts = Object.fromEntries(INPUTS.map(key => [key, []]));
+    for (const event of events) {
+      const key = EVENT_KEYS[event.event_kind];
+      if (key) amounts[key].push(event.amount);
+      if (event.event_kind === 'revenue' && event.cost_amount !== null)
+        amounts.cost.push(event.cost_amount);
+      if (event.event_kind === 'return' && event.document_kind === 'sale_return') {
+        amounts.revenue.push(event.amount);
+        if (event.cost_amount !== null) amounts.cost.push(event.cost_amount);
+      } else if (event.event_kind === 'return' && event.document_kind !== 'purchase_return')
+        warnings.push(`Unclassified return event: ${event.id}`);
+    }
+    for (const key of INPUTS) base[key] = sum(amounts[key]);
     rows = (await pool.query(`SELECT m.id AS metric_id,m.code,m.name,o.value::text AS override_value
       FROM qarzhy.report_overrides o JOIN qarzhy.report_metrics m ON m.id=o.metric_id
       WHERE o.dataset_id=$1 AND o.scope_id=$2 AND o.report_family='pnl'
