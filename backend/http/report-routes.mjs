@@ -7,6 +7,7 @@ import { withTransaction } from '../db/connection.mjs';
 import { getCoverage, saveCoverage, verifyOpeningSnapshot } from '../reports/coverage.mjs';
 import { getPnlPeriod } from '../reports/pnl.mjs';
 import { getCashflowPeriod } from '../reports/cashflow.mjs';
+import { getBalanceAt } from '../reports/balance.mjs';
 import { listEditableFigures, setReportOverride, resetReportOverride } from '../reports/overrides.mjs';
 import { listEditor, editEditorCell } from '../reports/editor-adapter.mjs';
 
@@ -34,6 +35,12 @@ export function registerReportRoutes(router, { pool, publicOrigin, csrfSecret })
     const query = new URL(request.url, 'http://localhost').searchParams;
     sendJson(response, 200, await getCashflowPeriod({ pool, principal, scopeId: query.get('scope_id'),
       start: query.get('start'), end: query.get('end'), source: query.get('source') || 'auto' }), requestId);
+  });
+  router.add('GET', '/api/reports/balance', async ({ request, response, requestId }) => {
+    const principal = await principalFor(request);
+    const query = new URL(request.url, 'http://localhost').searchParams;
+    sendJson(response, 200, await getBalanceAt({ pool, principal, scopeId: query.get('scope_id'),
+      asOf: query.get('as_of'), source: query.get('source') || 'auto' }), requestId);
   });
   router.add('GET', '/api/reports/coverage', async ({ request, response, requestId }) => {
     const principal = await principalFor(request);
