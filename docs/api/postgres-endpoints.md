@@ -1,6 +1,6 @@
 # PostgreSQL Node API: current backend contract
 
-The standalone process listens on `127.0.0.1:3139` unless `API_HOST`/`API_PORT` are set. It requires `DATABASE_URL`, `PUBLIC_APP_ORIGIN`, and `CSRF_SECRET`; the latter should be a random value of at least 32 bytes. Browser traffic stays on the Next.js origin and will be forwarded to this service after the report/finance API is complete. The API checks `qarzhy.schema_migrations` at startup and never runs DDL itself.
+The standalone process listens on `127.0.0.1:3139` unless `API_HOST`/`API_PORT` are set. It requires `DATABASE_URL`, `PUBLIC_APP_ORIGIN`, and `CSRF_SECRET`; the latter should be a random value of at least 32 bytes. Browser traffic stays on the Next.js origin. Setting `API_INTERNAL_URL=http://127.0.0.1:3139` on the Next.js process enables its same-origin proxy; keep it unset until all portal routes are implemented. The API checks `qarzhy.schema_migrations` at startup and never runs DDL itself.
 
 | Method and path | Request | Response | PostgreSQL entities |
 | --- | --- | --- | --- |
@@ -40,4 +40,4 @@ Development integration tests require `TEST_DATABASE_URL` ending in `/fin_test`;
 
 All report reads and writes enforce the caller's organization scope. Mutations require the same cookie, Origin, and CSRF checks as account routes. Migration `0004_report_overrides.sql` adds the effective override key and append-only history. Neither `0003` nor `0004` is applied automatically to the populated database.
 
-The Next.js UI still uses the existing SQLite-backed handler while the remaining balance, cash flow, sales, import, export, and full `/api/data` compatibility routes are being implemented. Do not point the UI to this API yet; the report and finance endpoints above can be exercised directly in the isolated test environment.
+The Next.js UI still uses the existing SQLite-backed handler when `API_INTERNAL_URL` is unset, while the remaining balance, cash flow, sales, import, export, and full `/api/data` compatibility routes are being implemented. Do not enable the proxy for normal UI use yet; the report and finance endpoints above can be exercised directly in the isolated test environment. The proxy forwards method, query, selected browser security headers, cookie, request body, response cookie, content type, download disposition and binary body; every response is no-store. It accepts only a loopback HTTP backend origin.
