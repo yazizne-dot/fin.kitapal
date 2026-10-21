@@ -9,7 +9,8 @@ if (process.env.TEST_DATABASE_URL) {
 const tests = (await readdir(new URL('../tests/backend/', import.meta.url)))
   .filter(name => name.endsWith('.test.mjs'))
   .map(name => `tests/backend/${name}`);
-const child = spawn(process.execPath, ['--test', ...tests], {
+// Integration files share one fin_test database and its global financial revision.
+const child = spawn(process.execPath, ['--test', '--test-concurrency=1', ...tests], {
   stdio: 'inherit',
   env: process.env,
 });

@@ -17,6 +17,7 @@ const LABEL_KEYS = new Map([
 ]);
 
 function metricKey(row) {
+  if (row.code.startsWith('live.pnl.')) return row.code.slice('live.pnl.'.length);
   if (INPUTS.includes(row.code) || DERIVED.includes(row.code)) return row.code;
   const label = row.name.split(':').at(-1).split('/').at(-1).trim().toUpperCase();
   for (const [prefix, key] of LABEL_KEYS) if (label === prefix || label.startsWith(`${prefix} `)) return key;
@@ -128,6 +129,7 @@ export async function getPnlPeriod({ pool, principal, scopeId, start, end, perio
     }
   }
   const figures = calculatePnl(base, overrides);
+  const baseFigures = calculatePnl(base);
   return { source: selected, datasetId, scopeId: scope, start: from, end: to, periodKind,
-    complete: Boolean(selected) && warnings.length === 0, coverage, figures, rows, warnings };
+    complete: Boolean(selected) && warnings.length === 0, coverage, figures, baseFigures, rows, warnings };
 }

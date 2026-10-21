@@ -2,6 +2,7 @@ import { requirePermission } from '../auth/guards.mjs';
 import { FinanceError, dateOnly, id } from '../finance/validation.mjs';
 import { audit } from '../finance/audit.mjs';
 import { assertReportScope } from './access.mjs';
+import { getPnlPeriod } from './pnl.mjs';
 
 const FAMILIES = new Set(['pnl', 'balance', 'cashflow', 'sales', 'budget']);
 const PERIOD_KINDS = new Set(['monthly', 'source_ytd', 'snapshot']);
@@ -39,7 +40,16 @@ async function currentRevision(client, revision) {
   return (await client.query('UPDATE qarzhy.financial_state SET revision=revision+1 WHERE singleton=true RETURNING revision')).rows[0].revision;
 }
 
-async function sourceValue(client, parts) {
+async function sourceValue(client, parts, principal) {
+  const dataset = (await client.query('SELECT kind FROM qarzhy.datasets WHERE id=$1', [parts[0]])).rows[0];
+  if (dataset?.kind === 'live' && parts[1] === 'pnl' && parts[5] === 'monthly') {
+    const metric = (await client.query('SELECT code FROM qarzhy.report_metrics WHERE id=$1', [parts[6]])).rows[0];
+    if (metric?.code.startsWith('live.pnl.')) {
+      const report = await getPnlPeriod({ pool: client, principal, scopeId: parts[2],
+        start: parts[3], end: parts[4], source: 'events' });
+      return report.baseFigures[metric.code.slice('live.pnl.'.length)] ?? null;
+    }
+  }
   const result = await client.query(`SELECT v.value::text,v.availability FROM qarzhy.historical_values v
     JOIN qarzhy.historical_series s ON s.id=v.series_id
     WHERE s.dataset_id=$1 AND s.report_family=$2 AND s.scope_id=$3
@@ -56,7 +66,7 @@ export async function setReportOverride({ client, principal, key, value, reason,
   const nextRevision = await currentRevision(client, revision);
   const previous = (await client.query(`SELECT value::text,source_value::text FROM qarzhy.report_overrides
     WHERE ${MATCH} FOR UPDATE`, parts)).rows[0];
-  const base = previous?.source_value ?? await sourceValue(client, parts);
+  const base = previous?.source_value ?? await sourceValue(client, parts, principal);
   const row = (await client.query(`INSERT INTO qarzhy.report_overrides
     (dataset_id,report_family,scope_id,period_start,period_end,period_kind,metric_id,article_id,channel_id,
      source_value,value,revision,updated_by)
@@ -98,6 +108,19 @@ export async function listEditableFigures({ pool, principal, filters }) {
   await assertReportScope(pool, principal, scopeId);
   const periodStart = dateOnly(filters.periodStart), periodEnd = dateOnly(filters.periodEnd);
   if (!FAMILIES.has(filters.reportFamily) || !PERIOD_KINDS.has(filters.periodKind)) throw new FinanceError('Invalid report filter');
+  const dataset = (await pool.query('SELECT kind FROM qarzhy.datasets WHERE id=$1', [datasetId])).rows[0];
+  if (dataset?.kind === 'live' && filters.reportFamily === 'pnl' && filters.periodKind === 'monthly') {
+    const report = await getPnlPeriod({ pool, principal, scopeId, start: periodStart, end: periodEnd, source: 'events' });
+    const metrics = (await pool.query("SELECT id,code,name FROM qarzhy.report_metrics WHERE code LIKE 'live.pnl.%' ORDER BY id")).rows;
+    const overridden = new Set(report.rows.map(row => row.metric_id));
+    const rows = metrics.map(metric => {
+      const key = metric.code.slice('live.pnl.'.length);
+      return { metric_id: metric.id, key, label: metric.name, original: report.baseFigures[key] ?? null,
+        value: report.figures[key] ?? null, overridden: overridden.has(metric.id), article_id: null, channel_id: null };
+    });
+    const revision = (await pool.query('SELECT revision FROM qarzhy.financial_state WHERE singleton=true')).rows[0].revision;
+    return { rows, revision: Number(revision) };
+  }
   const rows = (await pool.query(`SELECT m.id AS metric_id,m.name AS label,h.value::text AS original,
     h.availability,coalesce(o.value,h.value)::text AS value,o.id IS NOT NULL AS overridden,
     s.article_id,s.channel_id
