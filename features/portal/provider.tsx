@@ -10,24 +10,13 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { User, ApiClient, ReportFilters } from "../shared/types";
-import type { WorkbookData } from "../workbook/types";
-import type { LedgerData } from "../ledger/types";
+import type { ApiClient, ReportFilters } from "../shared/types";
+import { ApiError, createPortalRequester, loadPortalIdentityFirst, type PortalData } from "./api-client";
 import { useI18n } from "../i18n/provider";
 import { filtersFromSearch, isPortalPage, pageHref } from "./routes";
 import { LoginForm } from "../../components/login-form";
 import { PortalShell } from "./shell";
 
-export type PortalData =
-  WorkbookData | LedgerData | { source: "personal"; user: User };
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
-    super(message);
-  }
-}
 interface PortalState {
   data: PortalData;
   api: ApiClient;
@@ -72,24 +61,16 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, []);
   const api = useCallback<ApiClient>(
     async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
-      const response = await fetch(path, {
-        ...options,
-        headers: { "Content-Type": "application/json", ...options.headers },
-        cache: "no-store",
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        if (response.status === 401 && mounted.current) {
+      try {
+        return await createPortalRequester(fetch)<T>(path, options);
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.status === 401 && mounted.current) {
           pending.current?.abort();
           setData(null);
           setPhase("login");
         }
-        throw new ApiError(
-          result.error || "Сұрау орындалмады",
-          response.status,
-        );
+        throw cause;
       }
-      return result as T;
     },
     [],
   );
@@ -101,9 +82,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     setError("");
     try {
       const query = new URLSearchParams({ ...filters });
-      const result = await api<PortalData>("/api/data?" + query, {
-        signal: controller.signal,
-      });
+      const result = await loadPortalIdentityFirst(api, query.toString(), controller.signal);
       if (controller.signal.aborted || !mounted.current) return;
       setData(result);
       setLanguage(result.user.language || "kk");
