@@ -1,6 +1,10 @@
 import pg from 'pg';
 
-const REQUIRED_VERSIONS = ['0001_relational_finance', '0002_relational_source_resolution', '0003_node_api_security'];
+// A PostgreSQL DATE has no timezone. Keep it as YYYY-MM-DD so the host timezone
+// cannot move a reporting boundary to the previous UTC day.
+pg.types.setTypeParser(pg.types.builtins.DATE, value => value);
+
+const REQUIRED_VERSIONS = ['0001_relational_finance', '0002_relational_source_resolution', '0003_node_api_security', '0004_report_overrides'];
 
 export function createPool({ connectionString } = {}) {
   if (!connectionString) throw new Error('DATABASE_URL is required');

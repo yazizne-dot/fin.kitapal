@@ -9,7 +9,7 @@ import { sendJson } from './response.mjs';
 
 const COOKIE = 'qarzhy_session';
 
-function readCookie(request) {
+export function readCookie(request) {
   const pair = (request.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith(`${COOKIE}=`));
   return pair?.slice(COOKIE.length + 1) || null;
 }
@@ -23,7 +23,7 @@ function clearedCookie(origin) {
   return `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${origin.startsWith('https://') ? '; Secure' : ''}`;
 }
 
-async function readJson(request) {
+export async function readJson(request) {
   if (!/^application\/json(?:;|$)/i.test(request.headers['content-type'] || '')) throw new AccessError('Expected JSON body', 415);
   let size = 0;
   const chunks = [];

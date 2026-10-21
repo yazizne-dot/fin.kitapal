@@ -19,6 +19,8 @@ export async function resetTestDatabase(connectionString) {
     await client.query("INSERT INTO qarzhy.schema_migrations(version) VALUES ('0002_relational_source_resolution')");
     const migration = await readFile(new URL('../../../docs/sql/migrations/0003_node_api_security.sql', import.meta.url), 'utf8');
     await client.query(migration);
+    const overrides = await readFile(new URL('../../../docs/sql/migrations/0004_report_overrides.sql', import.meta.url), 'utf8');
+    await client.query(overrides);
   } finally {
     await client.end();
   }

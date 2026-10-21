@@ -4,7 +4,7 @@ import { assertSchema, withTransaction } from '../../backend/db/connection.mjs';
 import { startApi } from '../../backend/http/server.mjs';
 import { assertTestDatabaseUrl } from './helpers/test-db.mjs';
 
-const versions = ['0001_relational_finance', '0002_relational_source_resolution', '0003_node_api_security'];
+const versions = ['0001_relational_finance', '0002_relational_source_resolution', '0003_node_api_security', '0004_report_overrides'];
 
 function fakePool(found = versions) {
   const calls = [];

@@ -15,6 +15,7 @@ function pool() {
     if (sql.includes('schema_migrations')) return { rows: [
       { version: '0001_relational_finance' }, { version: '0002_relational_source_resolution' },
       { version: '0003_node_api_security' },
+      { version: '0004_report_overrides' },
     ] };
     return { rows: [] };
   } };
