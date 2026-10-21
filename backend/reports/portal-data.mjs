@@ -80,6 +80,25 @@ async function chosenMonth(pool, scopeId, organizationId) {
     new Date().toISOString().slice(0, 7);
 }
 
+async function availableMonths(pool, scopeId, organizationId, selected) {
+  const rows = (await pool.query(`SELECT DISTINCT month,kind FROM (
+    SELECT to_char(h.period_start,'YYYY-MM') AS month,'actual' AS kind
+      FROM qarzhy.historical_values h JOIN qarzhy.historical_series s ON s.id=h.series_id
+      WHERE s.scope_id=$1 AND s.report_family='pnl' AND h.period_kind='monthly'
+    UNION ALL
+    SELECT to_char(e.occurred_on,'YYYY-MM'),'actual'
+      FROM qarzhy.financial_events e JOIN qarzhy.datasets d ON d.id=e.dataset_id
+      WHERE d.kind='live' AND ($2::bigint IS NULL OR e.organization_id=$2)
+    UNION ALL
+    SELECT to_char(b.month,'YYYY-MM'),'plan'
+      FROM qarzhy.budget_items b JOIN qarzhy.budget_versions v ON v.id=b.budget_version_id
+      WHERE v.scope_id=$1 AND v.status='approved'
+  ) months ORDER BY month DESC LIMIT 240`, [scopeId, organizationId])).rows;
+  const periods = [...new Set([selected, ...rows.map(row => row.month)])].sort();
+  const latestActual = rows.filter(row => row.kind === 'actual').map(row => row.month).sort().at(-1);
+  return { periods, latestActual: latestActual ?? selected };
+}
+
 export async function buildPortalFinanceData({ pool, principal, filters = {} }) {
   requirePermission(principal, 'finance.read');
   if (filters.org) throw new FinanceError('This report filter is not available yet', 503);
@@ -94,6 +113,7 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
   if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
     throw new FinanceError('Invalid report month');
   const start = `${month}-01`, end = periodEnd(month);
+  const available = await availableMonths(pool, scope.id, scope.organization_id, month);
   const [pnl, balance, cashflow] = await Promise.all([
     getPnlPeriod({ pool, principal, scopeId: scope.id, start, end,
       source: filters.source === 'workbook' ? 'historical' : 'auto' }),
@@ -140,7 +160,8 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
       role: principal.role, language: principal.language, active: Number(Boolean(principal.active)),
       must_change_password: Number(Boolean(principal.password_change_due)),
       org: principal.org ?? '', point: principal.point ?? '' },
-    month, range: 'month', aggregation: 'PostgreSQL', channel: channelId, periods: [month], latest: month,
+    month, range: 'month', aggregation: 'PostgreSQL', channel: channelId,
+    periods: available.periods, latest: available.latestActual,
     actualThrough: actualAvailable ? month : null, actualAvailable, report, recalculated: null,
     previous: null, details: selectedChannel ? [] : details, refs: selectedChannel ? {} : refs,
     channels, history: actualAvailable ? [{ month, ...report }] : [],

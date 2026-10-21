@@ -75,6 +75,8 @@ test('finance portal P&L uses effective PostgreSQL figures and reports missing c
       VALUES($1,2031,'Approved plan','approved',$2,now()) RETURNING id`, [scope.id, financeUser.id])).rows[0];
     await pool.query(`INSERT INTO qarzhy.budget_items(budget_version_id,month,metric_id,amount)
       VALUES($1,'2031-04-01',(SELECT id FROM qarzhy.report_metrics WHERE code='live.pnl.opex'),20.00)`, [version.id]);
+    await pool.query(`INSERT INTO qarzhy.budget_items(budget_version_id,month,metric_id,amount)
+      VALUES($1,'2031-05-01',(SELECT id FROM qarzhy.report_metrics WHERE code='live.pnl.opex'),25.00)`, [version.id]);
     const article = (await pool.query("INSERT INTO qarzhy.financial_articles(code,name) VALUES('portal_budget_article','Budget Article') RETURNING id")).rows[0];
     await pool.query(`INSERT INTO qarzhy.budget_items(budget_version_id,month,metric_id,article_id,amount)
       VALUES($1,'2031-04-01',(SELECT id FROM qarzhy.report_metrics WHERE code='live.pnl.opex'),$2,5.00)`,
@@ -86,6 +88,7 @@ test('finance portal P&L uses effective PostgreSQL figures and reports missing c
     assert.equal(opexBudget.plan, 20);
     assert.equal(opexBudget.actual, 0);
     assert.equal(budgeted.budgetTimeline[0].plan, 20);
+    assert.deepEqual(budgeted.periods, ['2031-04', '2031-05']);
     assert.equal(budgeted.budgetRows.find(row => row.label.includes('Budget Article')).actual, null);
     assert.match(budgeted.checks.map(row => row.title).join(' '), /matching rule/i);
     const origin = 'http://127.0.0.1:3000';
