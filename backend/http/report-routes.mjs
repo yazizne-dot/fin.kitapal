@@ -8,6 +8,7 @@ import { getCoverage, saveCoverage, verifyOpeningSnapshot } from '../reports/cov
 import { getPnlPeriod } from '../reports/pnl.mjs';
 import { getCashflowPeriod } from '../reports/cashflow.mjs';
 import { listEditableFigures, setReportOverride, resetReportOverride } from '../reports/overrides.mjs';
+import { listEditor, editEditorCell } from '../reports/editor-adapter.mjs';
 
 export function registerReportRoutes(router, { pool, publicOrigin, csrfSecret }) {
   async function principalFor(request, permission = 'finance.read') {
@@ -59,4 +60,12 @@ export function registerReportRoutes(router, { pool, publicOrigin, csrfSecret })
   router.add('POST', '/api/reports/figures/reset', context => mutate(context,
     ({ client, principal, input }) => resetReportOverride({ client, principal, key: input.key,
       revision: input.revision, reason: input.reason })));
+  router.add('GET', '/api/finance/editor', async ({ request, response, requestId }) => {
+    const principal = await principalFor(request);
+    const query = new URL(request.url, 'http://localhost').searchParams;
+    sendJson(response, 200, await listEditor({ pool, principal, filters: {
+      book: query.get('book'), sheet: query.get('sheet'), q: query.get('q'), offset: query.get('offset'),
+    } }), requestId);
+  });
+  router.add('POST', '/api/finance/cell', context => mutate(context, editEditorCell));
 }

@@ -133,6 +133,20 @@ export async function listEditableFigures({ pool, principal, filters }) {
     WHERE s.dataset_id=$1 AND s.scope_id=$2 AND s.report_family=$3 AND h.period_start=$4
       AND h.period_end=$5 AND h.period_kind=$6 ORDER BY m.name,m.id LIMIT 500`,
     [datasetId, scopeId, filters.reportFamily, periodStart, periodEnd, filters.periodKind])).rows;
+  if (filters.reportFamily === 'pnl' && dataset?.kind === 'imported_finance') {
+    const report = await getPnlPeriod({ pool, principal, scopeId, start: periodStart, end: periodEnd,
+      periodKind: filters.periodKind, source: 'historical' });
+    for (const row of rows) {
+      const sourceRow = report.rows.find(source => String(source.metric_id) === String(row.metric_id) &&
+        String(source.article_id || 0) === String(row.article_id || 0) &&
+        String(source.channel_id || 0) === String(row.channel_id || 0));
+      if (!row.overridden && ['gross', 'operatingProfit', 'profit', 'retained'].includes(sourceRow?.key) &&
+          report.figures[sourceRow.key] !== null) {
+        row.value = report.figures[sourceRow.key];
+        row.recalculated = row.value !== row.original;
+      }
+    }
+  }
   const revision = (await pool.query('SELECT revision FROM qarzhy.financial_state WHERE singleton=true')).rows[0].revision;
   return { rows, revision: Number(revision) };
 }

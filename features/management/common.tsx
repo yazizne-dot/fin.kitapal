@@ -39,8 +39,8 @@ export interface ExpensesResponse {
 export interface EditorRow {
   cell: string;
   label: string;
-  original: number;
-  value: number;
+  original: number | string | null;
+  value: number | string | null;
   formula: string | null;
   overridden: boolean;
   recalculated: boolean;

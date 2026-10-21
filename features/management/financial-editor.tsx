@@ -10,6 +10,14 @@ import {
   type ManagementProps,
 } from "./common";
 
+function editorAmount(value: number | string | null) {
+  if (value === null) return "—";
+  if (typeof value === "number") return amount(value);
+  if (!/^-?\d+(?:\.\d+)?$/.test(value)) return "—";
+  const [integer, fraction] = value.split(".");
+  return integer.replace(/\B(?=(\d{3})+(?!\d))/g, " ") + (fraction ? `,${fraction}` : "");
+}
+
 export function FinancialEditorView({ api, refresh }: ManagementProps) {
   const [book, setBook] = useState("pnl");
   const [sheet, setSheet] = useState("");
@@ -40,7 +48,7 @@ export function FinancialEditorView({ api, refresh }: ManagementProps) {
       book: data.book,
       sheet: data.sheet,
       cell: row.cell,
-      value: Number(form.get("value")),
+      value: data.book.startsWith("pnl-") ? String(form.get("value") || "") : Number(form.get("value")),
       reason: String(form.get("reason") || ""),
       revision: data.revision,
       reset: form.get("reset") === "on",
@@ -51,7 +59,7 @@ export function FinancialEditorView({ api, refresh }: ManagementProps) {
     <Localized>
       <>
         <p className="note">
-          Есептерге түзетулер бастапқы Excel-ді өзгертпей сақталады. Өзгерткен
+          Есептерге түзетулер бастапқы деректерді өзгертпей сақталады. Өзгерткен
           адам мен себеп журналға жазылады.
         </p>
         <div className="panel">
@@ -136,9 +144,9 @@ export function FinancialEditorView({ api, refresh }: ManagementProps) {
                         >
                           {item.label}
                         </td>
-                        <td className="num">{amount(item.original)}</td>
+                        <td className="num">{editorAmount(item.original)}</td>
                         <td className="num">
-                          {amount(item.value)}
+                          {editorAmount(item.value)}
                           {(item.overridden || item.recalculated) && (
                             <small className="cell-note">Түзетілді</small>
                           )}
@@ -201,11 +209,11 @@ export function FinancialEditorView({ api, refresh }: ManagementProps) {
             error={action.error}
           >
             <p data-no-i18n>
-              {data.book} · {data.sheet}!{row.cell}
+              {data.book} · {data.sheet} · {row.cell}
               <br />
               {row.label}
             </p>
-            <p className="note">Бастапқы мән: {amount(row.original)}</p>
+            <p className="note">Бастапқы мән: {editorAmount(row.original)}</p>
             <label>
               Жаңа мән
               <input
@@ -213,7 +221,7 @@ export function FinancialEditorView({ api, refresh }: ManagementProps) {
                 type="number"
                 step="any"
                 required
-                defaultValue={row.value}
+                defaultValue={row.value ?? ""}
                 style={{ width: "100%" }}
               />
             </label>

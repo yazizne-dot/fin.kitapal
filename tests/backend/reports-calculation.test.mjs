@@ -5,6 +5,7 @@ import { assertTestDatabaseUrl } from './helpers/test-db.mjs';
 import { withTransaction } from '../../backend/db/connection.mjs';
 import { saveCoverage } from '../../backend/reports/coverage.mjs';
 import { getPnlPeriod } from '../../backend/reports/pnl.mjs';
+import { listEditableFigures } from '../../backend/reports/overrides.mjs';
 
 test('P&L chooses historical or live coverage once and keeps source YTD separate', {
   skip: !process.env.TEST_DATABASE_URL,
@@ -27,7 +28,7 @@ test('P&L chooses historical or live coverage once and keeps source YTD separate
       datasetId: dataset.id, scopeId: scope.id, family: 'pnl', start, end, sourceKind,
     } }));
 
-    const figures = { revenue: '100.00', cost: '30.00', opex: '10.00', otherExpense: '3.00',
+    const figures = { revenue: '100.00', cost: '30.00', gross: '70.00', opex: '10.00', otherExpense: '3.00',
       bonuses: '2.00', otherIncome: '0.00', taxes: '5.00', dividends: '4.00' };
     let revenueMetricId;
     for (const [code, value] of Object.entries(figures)) {
@@ -68,6 +69,13 @@ test('P&L chooses historical or live coverage once and keeps source YTD separate
     const corrected = await getPnlPeriod({ pool, principal, scopeId: scope.id, start: '2026-10-01', end: '2026-11-01' });
     assert.equal(corrected.figures.revenue, '120.00');
     assert.equal(corrected.figures.profit, '70.00');
+    const editable = await listEditableFigures({ pool, principal, filters: { datasetId: historical.id,
+      scopeId: scope.id, reportFamily: 'pnl', periodStart: '2026-10-01', periodEnd: '2026-11-01',
+      periodKind: 'monthly' } });
+    const grossRow = editable.rows.find(row => row.label === 'gross');
+    assert.equal(grossRow.original, '70.00');
+    assert.equal(grossRow.value, '90.00');
+    assert.equal(grossRow.recalculated, true);
     const factsAfter = (await pool.query(`SELECT
       (SELECT count(*) FROM qarzhy.financial_events WHERE scope_id=$1) AS events,
       (SELECT count(*) FROM qarzhy.cash_movements WHERE scope_id=$1) AS movements,
