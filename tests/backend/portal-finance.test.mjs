@@ -35,6 +35,24 @@ test('finance portal P&L uses effective PostgreSQL figures and reports missing c
     assert.equal(data.report.profit, 70.05);
     assert.equal(data.actualAvailable, true);
     assert.deepEqual(data.periods, ['2031-04']);
+    const account = (await pool.query(`INSERT INTO qarzhy.cash_accounts(organization_id,code,name,account_type)
+      VALUES($1,'portal_finance_cash','Portal Finance Cash','bank') RETURNING id`, [org.id])).rows[0];
+    const snapshot = (await pool.query(`INSERT INTO qarzhy.balance_snapshots(dataset_id,scope_id,as_of_date,label,status)
+      VALUES($1,$2,'2031-04-01','Portal opening','verified') RETURNING id`, [dataset.id, scope.id])).rows[0];
+    await pool.query('INSERT INTO qarzhy.cash_balances(snapshot_id,cash_account_id,amount) VALUES($1,$2,50)',
+      [snapshot.id, account.id]);
+    await pool.query(`INSERT INTO qarzhy.coverage_rules(dataset_id,scope_id,report_family,starts_on,ends_on,source_kind,opening_snapshot_id)
+      VALUES($1,$2,'balance','2031-04-01','2031-06-01','opening_and_movements',$3)`, [dataset.id, scope.id, snapshot.id]);
+    await pool.query(`INSERT INTO qarzhy.coverage_rules(dataset_id,scope_id,report_family,starts_on,ends_on,source_kind)
+      VALUES($1,$2,'cashflow','2031-04-01','2031-05-01','movements')`, [dataset.id, scope.id]);
+    await pool.query(`INSERT INTO qarzhy.cash_movements(dataset_id,scope_id,organization_id,cash_account_id,
+      occurred_on,direction,amount,posting_key) VALUES($1,$2,$3,$4,'2031-04-15','in',5.25,'portal-finance-cash-in')`,
+    [dataset.id, scope.id, org.id, account.id]);
+    const withStatements = await buildPortalFinanceData({ pool, principal, filters: { month: '2031-04' } });
+    assert.equal(withStatements.statements.balance.rows.find(row => row.id === 'cash').value, 55.25);
+    assert.equal(withStatements.statements.balance.rows.find(row => row.id === 'assets').value, null);
+    assert.equal(withStatements.statements.cashflow.business.net, 5.25);
+    assert.equal(withStatements.statements.cashflow.rows.length, 1);
     const hashed = await hashPassword('portal finance private phrase 2026');
     const financeUser = (await pool.query(`INSERT INTO qarzhy.users(username,name,role_id,organization_id,password_salt,password_hash,
       must_change_password,password_changed_at) VALUES('portalfinance','Portal Finance',

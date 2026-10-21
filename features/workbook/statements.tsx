@@ -59,7 +59,8 @@ export function BalancePage({
 }) {
   const { t } = useI18n(),
     b = data.statements?.balance;
-  if (!b) return <Missing text="Баланс файлы жүктелмеген." />;
+  if (!b) return <Missing text={data.metadata.file.startsWith("PostgreSQL") ? "Бұл күнге расталған бастапқы баланс жоқ." : "Баланс файлы жүктелмеген."} />;
+  const relational = b.metadata.file.startsWith("PostgreSQL");
   const v = (id: string) => b.rows.find((r) => r.id === id)?.value;
   return (
     <>
@@ -70,16 +71,16 @@ export function BalancePage({
             {t("Баланс күні")}: {b.asOfLabel}
           </b>{" "}
           · {t("компания бойынша")}.<br />
-          {t(
-            "Бұл — 01.09.2026 күнгі бір сәттік қалдық. Жоғарғы ай/арна сүзгілері баланс күнін өзгертпейді. Бастапқы қалдық пен кезең өзгерісі үшін алдыңғы күннің балансы керек.",
-          )}
+          {t(relational
+            ? "Қалдық расталған бастапқы сәттен және кейінгі қозғалыстардан есептеледі. Расталмаған баптар бос көрсетіледі."
+            : "Бұл — 01.09.2026 күнгі бір сәттік қалдық. Жоғарғы ай/арна сүзгілері баланс күнін өзгертпейді. Бастапқы қалдық пен кезең өзгерісі үшін алдыңғы күннің балансы керек.")}
         </p>
       </div>
       <section className="kpi-grid">
         <Card
           label="Активтер"
           value={v("assets")}
-          note="01.09.2026 күнгі қалдық"
+          note={relational ? b.asOfLabel : "01.09.2026 күнгі қалдық"}
           icon="balance"
         />
         <Card
@@ -97,7 +98,7 @@ export function BalancePage({
         <Card
           label="Меншікті капитал"
           value={v("equity")}
-          note="файлда: активтер − міндеттемелер"
+          note={relational ? "расталған капитал дерегі қажет" : "файлда: активтер − міндеттемелер"}
           icon="chart"
         />
       </section>
@@ -107,7 +108,7 @@ export function BalancePage({
             <h2>{t("Басқарушылық баланс")}</h2>
             <p>
               {b.metadata.file} ·{" "}
-              {t("түпнұсқа C бағаны; қайталанған F бағаны қосылмайды")}
+              {t(relational ? "расталған бастапқы қалдық және тіркелген қозғалыстар" : "түпнұсқа C бағаны; қайталанған F бағаны қосылмайды")}
             </p>
           </div>
           <span className="status">{b.asOfLabel}</span>
@@ -177,13 +178,14 @@ export function BalancePage({
       <div className="method-note">
         <Icon name="info" size={18} />
         <p>
-          <b>{t("Капитал — файлдағы қалдық формуласы: C19 = C12 − C17.")}</b>{" "}
-          {t(
-            "Сондықтан баланс теңдігі тәуелсіз тексеру болып саналмайды. Салымдар мен бөлінбеген пайда бөлек берілмеген; P&L пайдасы капиталға қайта қосылмайды.",
-          )}
-          <br />
-          {t(
-            "Тауарлар тек «Предоплата» қорынан алынған. «Реализация» қоры осы активке қосылмаған — бастапқы файлдың тәсілі сақталды.",
+          {relational ? (
+            <><b>{t("Толық баланс әлі расталмаған.")}</b>{" "}
+              {t("Тауарлар мен өзге активтердің қозғалысы салыстырылғанға дейін жиынтық пен капитал есептелмейді. Бастапқы құжаттар өзгермейді.")}</>
+          ) : (
+            <><b>{t("Капитал — файлдағы қалдық формуласы: C19 = C12 − C17.")}</b>{" "}
+              {t("Сондықтан баланс теңдігі тәуелсіз тексеру болып саналмайды. Салымдар мен бөлінбеген пайда бөлек берілмеген; P&L пайдасы капиталға қайта қосылмайды.")}
+              <br />
+              {t("Тауарлар тек «Предоплата» қорынан алынған. «Реализация» қоры осы активке қосылмаған — бастапқы файлдың тәсілі сақталды.")}</>
           )}
         </p>
       </div>
@@ -199,9 +201,10 @@ export function CashflowPage({
 }) {
   const { t } = useI18n(),
     cf = data.statements?.cashflow;
+  const relational = data.metadata.file.startsWith("PostgreSQL");
   if (!cf || !cf.available || !cf.totals || !cf.business)
     return (
-      <Missing text="Бұл кезеңге ДДС фактісі файлдан табылмады. 2026 жылғы тамызды немесе бұрынғы айды таңдаңыз." />
+      <Missing text={relational ? "Бұл кезеңге ақша қозғалысының расталған қамтуы жоқ." : "Бұл кезеңге ДДС фактісі файлдан табылмады. 2026 жылғы тамызды немесе бұрынғы айды таңдаңыз."} />
     );
   const x = cf.business,
     summary = cf.summary,
@@ -214,28 +217,28 @@ export function CashflowPage({
           <b>{cf.metadata.file}</b> ·{" "}
           {t(cf.range === "ytd" ? "жыл басынан" : "айлық")} ·{" "}
           {t("компания бойынша")}.<br />
-          {t(
-            "Төлем күні бойынша «База» парағынан есептелген. Сату арнасының сүзгісі ДДС-ке қолданылмайды. «Пополнение_кассы» баптары бөлек көрсетілген; шоттар байланысы берілмегендіктен олардың барлығын расталған ішкі аударым деп есептемейміз.",
-          )}
+          {t(relational
+            ? "Төлем күні бойынша PostgreSQL қозғалыстарынан есептелген. Расталған ішкі аударымдар бөлек көрсетіледі. Сатылым арналарының сүзгісі қолданылмайды."
+            : "Төлем күні бойынша «База» парағынан есептелген. Сату арнасының сүзгісі ДДС-ке қолданылмайды. «Пополнение_кассы» баптары бөлек көрсетілген; шоттар байланысы берілмегендіктен олардың барлығын расталған ішкі аударым деп есептемейміз.")}
         </p>
       </div>
       <section className="kpi-grid">
         <Card
           label="Түсімдер"
           value={x.inflow}
-          note="касса толықтыруларынсыз"
+          note={relational ? "ішкі аударымдарсыз" : "касса толықтыруларынсыз"}
           icon="trend"
         />
         <Card
           label="Төлемдер"
           value={x.outflow}
-          note="касса толықтыруларынсыз"
+          note={relational ? "ішкі аударымдарсыз" : "касса толықтыруларынсыз"}
           icon="wallet"
         />
         <Card
           label="Таза ақша қозғалысы"
           value={x.net}
-          note="касса толықтыруларынсыз"
+          note={relational ? "ішкі аударымдарсыз" : "касса толықтыруларынсыз"}
           icon="swap"
         />
         <Card
@@ -243,7 +246,7 @@ export function CashflowPage({
           value={cf.closing}
           note={
             cf.closingDate
-              ? "баланс бойынша · 01.09.2026"
+              ? relational ? `баланс бойынша · ${cf.closingDate}` : "баланс бойынша · 01.09.2026"
               : "осы кезеңге баланс қалдығы жоқ"
           }
           icon="balance"
@@ -293,7 +296,7 @@ export function CashflowPage({
             </thead>
             <tbody>
               <tr className="total">
-                <td>{t("Касса толықтыруларынсыз")}</td>
+                <td>{t(relational ? "Ішкі аударымдарсыз" : "Касса толықтыруларынсыз")}</td>
                 <td className="num">{format(x.inflow)}</td>
                 <td className="num">{format(x.outflow)}</td>
                 <td className="num">{format(x.net)}</td>
@@ -303,13 +306,13 @@ export function CashflowPage({
                 data-statement-detail="cash:replenishment"
                 onClick={() => onDetail({ kind: "cash", replenishment: true })}
               >
-                <td>{t("Касса толықтырулары · жіктеу қажет")}</td>
+                <td>{t(relational ? "Расталған ішкі аударымдар" : "Касса толықтырулары · жіктеу қажет")}</td>
                 <td className="num">{format(cf.replenishments.inflow)}</td>
                 <td className="num">{format(cf.replenishments.outflow)}</td>
                 <td className="num">{format(cf.replenishments.net)}</td>
               </tr>
               <tr className="total">
-                <td>{t("«База» барлық жолдары")}</td>
+                <td>{t(relational ? "Барлық ақша қозғалыстары" : "«База» барлық жолдары")}</td>
                 <td className="num">{format(cf.totals.inflow)}</td>
                 <td className="num">{format(cf.totals.outflow)}</td>
                 <td className="num">{format(cf.totals.net)}</td>
@@ -413,9 +416,9 @@ export function CashflowPage({
         <Icon name="shield" size={18} />
         <p>
           <b>{t("Ақша қалдығының салыстыруы аяқталмаған.")}</b>{" "}
-          {t(
-            "Кезең басындағы тәуелсіз ақша қалдығы файлдарда жоқ. Сондықтан «басы + қозғалыс = соңы» теңдігі расталды деп көрсетілмейді және бастапқы қалдық кері есептеліп факт ретінде берілмейді.",
-          )}
+          {t(relational
+            ? "Бастапқы қалдық расталмаған болса, кезең соңындағы қалдық бос қалады. Ақша қозғалыстары бастапқы қалдықты алмастырмайды."
+            : "Кезең басындағы тәуелсіз ақша қалдығы файлдарда жоқ. Сондықтан «басы + қозғалыс = соңы» теңдігі расталды деп көрсетілмейді және бастапқы қалдық кері есептеліп факт ретінде берілмейді.")}
           <br />
           {t(
             "Операциялық / инвестициялық / қаржылық қызмет топтары үшін баптар жіктемесін бекіту қажет. Бұл бет бастапқы баптар мен нақты қозғалыстарды көрсетеді.",
@@ -437,6 +440,7 @@ export function StatementDetailView({
   if (detail.kind === "balance") {
     const b = data.statements?.balance;
     if (!b) return null;
+    const relational = b.metadata.file.startsWith("PostgreSQL");
     const row = b.rows.find((r) => r.id === detail.id);
     if (!row) return null;
     const sets: Record<string, BalanceDetail[]> = {
@@ -463,19 +467,19 @@ export function StatementDetailView({
           <br />
           {row.source.formula
             ? `${t("Формула")}: ${row.source.formula}`
-            : t("Файлда сақталған мән")}
-          {detail.id === "inventory" && (
+            : t(relational ? "Дерекқордағы мән" : "Файлда сақталған мән")}
+          {detail.id === "inventory" && !relational && (
             <>
               <br />
               {t("Тек «Предоплата» қоры. «Реализация» бөлек қалады.")}
             </>
           )}
         </p>
-        {rows ? (
+        {rows && (!relational || rows.length > 0) ? (
           <>
             <p className="note">
               {t("Расшифровка жолдарының қосындысы")}: {money(sum)} ·{" "}
-              {t("Файл қорытындысымен айырма")}:{" "}
+              {t(relational ? "Жиынтықпен айырма" : "Файл қорытындысымен айырма")}:{" "}
               {money((sum || 0) - (row.value || 0))}
             </p>
             <input
@@ -523,7 +527,7 @@ export function StatementDetailView({
           </>
         ) : (
           <p className="note">
-            {t("Бұл бап бойынша жеке құжаттар тізілімі файлда берілмеген.")}
+            {t(relational ? "Бұл баптың толық егжей-тегжейі әлі салыстырылмаған." : "Бұл бап бойынша жеке құжаттар тізілімі файлда берілмеген.")}
           </p>
         )}
       </>

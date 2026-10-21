@@ -1,11 +1,69 @@
 import { requirePermission } from '../auth/guards.mjs';
 import { FinanceError } from '../finance/validation.mjs';
 import { getPnlPeriod } from './pnl.mjs';
+import { getCashflowPeriod } from './cashflow.mjs';
+import { getBalanceAt } from './balance.mjs';
 
 const METRICS = ['revenue', 'cost', 'gross', 'opex', 'operatingProfit', 'otherExpense',
   'taxes', 'bonuses', 'otherIncome', 'profit', 'dividends', 'retained'];
 const periodEnd = month => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 1)).toISOString().slice(0, 10);
 const display = value => value === null || value === undefined ? null : Number(value);
+
+function presentBalance(balance) {
+  if (!balance.openingSnapshotId) return null;
+  const source = { sheet: 'qarzhy.balance_snapshots', cell: String(balance.openingSnapshotId),
+    period: balance.asOf };
+  const labels = [
+    ['assets', 'Активтер'], ['cash', 'Ақша қаражаты'], ['receivables', 'Дебиторлық берешек'],
+    ['inventory', 'Тауар қалдығы'], ['fixed', 'Өзге активтер'], ['liabilities', 'Міндеттемелер'],
+    ['payables', 'Кредиторлық берешек'], ['equity', 'Меншікті капитал'],
+  ];
+  const values = { assets: balance.totals.assets, cash: balance.totals.cash,
+    receivables: balance.totals.receivable, inventory: balance.totals.inventory,
+    fixed: balance.totals.otherAssets, liabilities: null, payables: balance.totals.payable,
+    equity: null };
+  return { date: balance.asOf, asOfLabel: balance.asOf,
+    metadata: { file: 'PostgreSQL qarzhy', limitations: balance.warnings },
+    rows: labels.map(([id, label]) => ({ id, label, value: display(values[id]), source })),
+    cashAccounts: [], suppliers: [], assetGroups: [], inventory: [], checks: [], capitalIsResidual: false };
+}
+
+function presentCashflow(cashflow, balance, month) {
+  if (cashflow.totals.net === null) return null;
+  const rows = cashflow.rows.map(row => ({ id: row.id, date: row.occurred_on,
+    period: row.occurred_on.slice(0, 7),
+    article: `${row.article_name || 'Бап көрсетілмеген'}${row.is_transfer ? ' · Ішкі аударым' : ''}`,
+    inflow: row.direction === 'in' ? Number(row.amount) : 0,
+    outflow: row.direction === 'out' ? Number(row.amount) : 0,
+    note: row.note, cashReplenishment: row.is_transfer,
+    source: { sheet: 'qarzhy.cash_movements', cell: String(row.id), period: row.occurred_on } }));
+  const sum = (items, key) => items.reduce((value, row) => value + row[key], 0);
+  const allInflow = sum(rows, 'inflow'), allOutflow = sum(rows, 'outflow');
+  const transferRows = rows.filter(row => row.cashReplenishment);
+  const transferInflow = sum(transferRows, 'inflow'), transferOutflow = sum(transferRows, 'outflow');
+  const grouped = new Map(), daily = new Map();
+  for (const row of rows) {
+    const articleKey = `${row.article}:${row.cashReplenishment}`;
+    const article = grouped.get(articleKey) ?? { article: row.article, inflow: 0, outflow: 0,
+      count: 0, cashReplenishment: row.cashReplenishment };
+    article.inflow += row.inflow; article.outflow += row.outflow; article.count++;
+    grouped.set(articleKey, article);
+    const date = daily.get(row.date) ?? { date: row.date, inflow: 0, outflow: 0 };
+    date.inflow += row.inflow; date.outflow += row.outflow;
+    daily.set(row.date, date);
+  }
+  const closing = display(balance.totals.cash);
+  return { month, range: 'month', available: true,
+    metadata: { file: 'PostgreSQL qarzhy', limitations: cashflow.warnings }, periods: [month],
+    totals: { inflow: allInflow, outflow: allOutflow, net: allInflow - allOutflow },
+    business: { inflow: Number(cashflow.totals.inflow), outflow: Number(cashflow.totals.outflow),
+      net: Number(cashflow.totals.net) },
+    replenishments: { inflow: transferInflow, outflow: transferOutflow,
+      net: transferInflow - transferOutflow },
+    articles: [...grouped.values()], rows, daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    summary: null, opening: display(balance.opening?.cash), closing,
+    closingDate: closing === null ? null : balance.asOf, periodMismatchCount: 0 };
+}
 
 async function chosenMonth(pool, scopeId, organizationId) {
   const [history, live] = await Promise.all([
@@ -34,8 +92,12 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
   if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
     throw new FinanceError('Invalid report month');
   const start = `${month}-01`, end = periodEnd(month);
-  const pnl = await getPnlPeriod({ pool, principal, scopeId: scope.id, start, end,
-    source: filters.source === 'workbook' ? 'historical' : 'auto' });
+  const [pnl, balance, cashflow] = await Promise.all([
+    getPnlPeriod({ pool, principal, scopeId: scope.id, start, end,
+      source: filters.source === 'workbook' ? 'historical' : 'auto' }),
+    getBalanceAt({ pool, principal, scopeId: scope.id, asOf: end }),
+    getCashflowPeriod({ pool, principal, scopeId: scope.id, start, end }),
+  ]);
   const report = Object.fromEntries(METRICS.map(key => [key, display(pnl.figures[key])]));
   const details = pnl.rows.filter(row => row.key && row.value !== undefined).map(row => {
     const source = { sheet: 'qarzhy.report_metrics', cell: String(row.metric_id), period: month,
@@ -45,7 +107,8 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
   });
   const refs = {};
   for (const row of details) (refs[row.group] ??= []).push(...row.sources);
-  const checks = [...pnl.warnings, 'Balance, sales, budget and cash-flow projections are still incomplete']
+  const checks = [...pnl.warnings, ...balance.warnings, ...cashflow.warnings,
+    'Sales and budget projections are still incomplete']
     .map((warning, index) => ({ id: `coverage-${index}`, period: month, kind: 'coverage',
       title: warning, reported: null, calculated: null, difference: null,
       sheet: 'qarzhy.coverage_rules', cell: '', detail: warning }));
@@ -64,6 +127,7 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
     previous: null, details, refs, channels: [], history: actualAvailable ? [{ month, ...report }] : [],
     budgetRows: [], budgetTimeline: [], checks, allCheckCount: checks.length,
     metadata: { file: 'PostgreSQL qarzhy', method: 'Relational finance reports', unit: 'KZT',
-      limitations: checks.map(row => row.title) }, statements: { balance: null, cashflow: null },
+      limitations: checks.map(row => row.title) }, statements: { balance: presentBalance(balance),
+      cashflow: presentCashflow(cashflow, balance, month) },
     overrideCount, siteEntryCount: 0, financialRevision: Number(revision ?? 0) };
 }

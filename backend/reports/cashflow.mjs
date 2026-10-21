@@ -46,9 +46,10 @@ export async function getCashflowPeriod({ pool, principal, scopeId, start, end, 
     const datasetKind = (await pool.query('SELECT kind FROM qarzhy.datasets WHERE id=$1', [datasetId])).rows[0]?.kind;
     const live = datasetKind === 'live';
     rows = (await pool.query(`SELECT m.id,m.occurred_on::text AS occurred_on,m.direction,m.amount::text,m.organization_id,
-      m.cash_account_id,m.article_id,m.counterparty_id,m.note,
+      m.cash_account_id,m.article_id,a.name AS article_name,m.counterparty_id,m.note,
       (t.outgoing_id IS NOT NULL OR t.incoming_id IS NOT NULL) AS is_transfer
       FROM qarzhy.cash_movements m
+      LEFT JOIN qarzhy.financial_articles a ON a.id=m.article_id
       LEFT JOIN qarzhy.cash_transfers t ON t.outgoing_id=m.id OR t.incoming_id=m.id
       WHERE m.dataset_id=$1 AND m.occurred_on >= $3 AND m.occurred_on < $4
         AND (($6::boolean AND ($2::bigint IS NULL OR m.organization_id=$2))
