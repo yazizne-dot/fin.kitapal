@@ -31,6 +31,7 @@ Development integration tests require `TEST_DATABASE_URL` ending in `/fin_test`;
 | `GET/POST /api/movements`, `POST /api/settlements` | Read and record cash movements; apply a payment to a document |
 | `GET/POST/PATCH /api/expenses` | Employee expenses, owner edit/delete, and finance review; existing UI cents/category fields map to exact PostgreSQL money/article IDs |
 | `GET /api/data` | Employee personal view from PostgreSQL; finance/report view still awaits the full report contract |
+| `GET /api/finance/audit` | Last 100 audit actions for accounts-management permission; displays actor/action/reason without raw before/after JSON |
 | `GET/POST /api/plans`, `POST /api/budget/items`, `POST /api/period` | Plans, budgets, and period closure |
 | `GET/POST /api/reports/coverage` | Inspect report-family source intervals and configure cutover |
 | `POST /api/reports/opening-snapshot/verify` | Verify an opening balance before balance cutover |
