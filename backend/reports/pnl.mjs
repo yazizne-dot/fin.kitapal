@@ -115,8 +115,9 @@ export async function getPnlPeriod({ pool, principal, scopeId, start, end, perio
   } else if (selected === 'events') {
     if (periodKind !== 'monthly') throw new FinanceError('Live events cannot supply source YTD');
     const events = (await pool.query(`SELECT event_kind,amount::text FROM qarzhy.financial_events
-      WHERE dataset_id=$1 AND scope_id=$2 AND occurred_on >= $3 AND occurred_on < $4`,
-    [datasetId, scope, from, to])).rows;
+      WHERE dataset_id=$1 AND ($2::bigint IS NULL OR organization_id=$2)
+        AND occurred_on >= $3 AND occurred_on < $4`,
+    [datasetId, scopeRow.organization_id, from, to])).rows;
     for (const key of INPUTS) base[key] = sum(events.filter(row => EVENT_KEYS[row.event_kind] === key).map(row => row.amount));
     rows = (await pool.query(`SELECT m.id AS metric_id,m.code,m.name,o.value::text AS override_value
       FROM qarzhy.report_overrides o JOIN qarzhy.report_metrics m ON m.id=o.metric_id

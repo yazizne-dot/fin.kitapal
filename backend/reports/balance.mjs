@@ -100,9 +100,9 @@ export async function getBalanceAt({ pool, principal, scopeId, asOf, source = 'a
 
   if (rule.source_kind !== 'opening_and_movements') throw new FinanceError('Invalid balance coverage source');
   const snapshot = rule.opening_snapshot_id
-    ? (await pool.query(`SELECT id,as_of_date,status FROM qarzhy.balance_snapshots
+    ? (await pool.query(`SELECT id,as_of_date::text AS as_of_date,status FROM qarzhy.balance_snapshots
       WHERE id=$1 AND dataset_id=$2 AND scope_id=$3`, [rule.opening_snapshot_id, rule.dataset_id, scope])).rows[0]
-    : (await pool.query(`SELECT id,as_of_date,status FROM qarzhy.balance_snapshots
+    : (await pool.query(`SELECT id,as_of_date::text AS as_of_date,status FROM qarzhy.balance_snapshots
       WHERE dataset_id=$1 AND scope_id=$2 AND as_of_date<=$3 ORDER BY as_of_date DESC,id DESC LIMIT 1`,
     [rule.dataset_id, scope, date])).rows[0];
   if (!snapshot || snapshot.status !== 'verified' || day(snapshot.as_of_date) > date) {

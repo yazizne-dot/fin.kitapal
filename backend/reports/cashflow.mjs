@@ -11,6 +11,7 @@ function total(rows, direction) {
 export async function getCashflowPeriod({ pool, principal, scopeId, start, end, source = 'auto' }) {
   requirePermission(principal, 'finance.read');
   const scope = await assertReportScope(pool, principal, scopeId);
+  const organizationId = (await pool.query('SELECT organization_id FROM qarzhy.report_scopes WHERE id=$1', [scope])).rows[0].organization_id;
   const from = dateOnly(start), to = dateOnly(end);
   if (from >= to || !['auto', 'historical', 'movements', 'ledger'].includes(source))
     throw new FinanceError('Invalid cash flow filter');
@@ -42,13 +43,17 @@ export async function getCashflowPeriod({ pool, principal, scopeId, start, end, 
       ORDER BY m.id`, [datasetId, scope, from, to])).rows;
     warnings.push('Historical cash flow totals need an explicit metric mapping');
   } else if (selected === 'movements' || selected === 'ledger') {
-    rows = (await pool.query(`SELECT m.id,m.occurred_on,m.direction,m.amount::text,m.organization_id,
+    const datasetKind = (await pool.query('SELECT kind FROM qarzhy.datasets WHERE id=$1', [datasetId])).rows[0]?.kind;
+    const live = datasetKind === 'live';
+    rows = (await pool.query(`SELECT m.id,m.occurred_on::text AS occurred_on,m.direction,m.amount::text,m.organization_id,
       m.cash_account_id,m.article_id,m.counterparty_id,m.note,
       (t.outgoing_id IS NOT NULL OR t.incoming_id IS NOT NULL) AS is_transfer
       FROM qarzhy.cash_movements m
       LEFT JOIN qarzhy.cash_transfers t ON t.outgoing_id=m.id OR t.incoming_id=m.id
-      WHERE m.dataset_id=$1 AND m.scope_id=$2 AND m.occurred_on >= $3 AND m.occurred_on < $4
-      ORDER BY m.occurred_on,m.id`, [datasetId, scope, from, to])).rows;
+      WHERE m.dataset_id=$1 AND m.occurred_on >= $3 AND m.occurred_on < $4
+        AND (($6::boolean AND ($2::bigint IS NULL OR m.organization_id=$2))
+          OR (NOT $6::boolean AND m.scope_id=$5))
+      ORDER BY m.occurred_on,m.id`, [datasetId, organizationId, from, to, scope, live])).rows;
     if (rows.some(row => !row.is_transfer && (!row.organization_id || !row.cash_account_id)))
       warnings.push('Unmapped organization or cash account in imported movements');
     const inflow = total(rows, 'in'), outflow = total(rows, 'out');

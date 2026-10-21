@@ -20,7 +20,7 @@ export async function getCoverage({ pool, principal, family, scopeId, metricId =
   if (from >= to) throw new FinanceError('Invalid report interval');
   const scope = await assertReportScope(pool, principal, scopeId);
   const rows = (await pool.query(`SELECT c.id,c.dataset_id,d.kind AS dataset_kind,c.scope_id,c.report_family,
-    c.metric_id,c.starts_on,c.ends_on,c.source_kind,c.opening_snapshot_id
+    c.metric_id,c.starts_on::text AS starts_on,c.ends_on::text AS ends_on,c.source_kind,c.opening_snapshot_id
     FROM qarzhy.coverage_rules c JOIN qarzhy.datasets d ON d.id=c.dataset_id
     WHERE c.report_family=$1 AND c.scope_id=$2
       AND (c.metric_id=$3 OR c.metric_id IS NULL)
@@ -61,7 +61,7 @@ export async function saveCoverage({ client, principal, input }) {
   let openingSnapshotId = null;
   if (input.sourceKind === 'opening_and_movements') {
     openingSnapshotId = id(input.openingSnapshotId, 'opening snapshot ID');
-    const snapshot = (await client.query(`SELECT status,as_of_date,dataset_id,scope_id FROM qarzhy.balance_snapshots
+    const snapshot = (await client.query(`SELECT status,as_of_date::text AS as_of_date,dataset_id,scope_id FROM qarzhy.balance_snapshots
       WHERE id=$1`, [openingSnapshotId])).rows[0];
     if (!snapshot || snapshot.status !== 'verified' || day(snapshot.as_of_date) !== start ||
         String(snapshot.dataset_id) !== datasetId || String(snapshot.scope_id) !== scopeId)
