@@ -165,6 +165,24 @@ async function buildYearToDate({ pool, principal, filters, scope, month, availab
     reported: null, calculated: null, difference: null,
     sheet: 'qarzhy.coverage_rules', cell: '', detail: warning,
   }));
+  if (complete) {
+    const sourceYtd = await getPnlPeriod({ pool, principal, scopeId: scope.id,
+      start: `${month.slice(0, 4)}-01-01`, end: `${Number(month.slice(0, 4)) + 1}-01-01`,
+      periodKind: 'source_ytd', source: 'historical' });
+    const sameCutoff = ['revenue', 'cost'].every(key => sourceYtd.figures[key] !== null &&
+      new Exact(sourceYtd.figures[key]).equals(report[key]));
+    if (sameCutoff) for (const key of METRICS) {
+      if (sourceYtd.figures[key] === null || report[key] === null) continue;
+      const difference = new Exact(sourceYtd.figures[key]).minus(report[key]);
+      if (difference.abs().lessThan('0.01')) continue;
+      const title = `Source YTD ${key} differs from covered monthly sum`;
+      checks.push({ id: `source-ytd-${key}`, period: `${month.slice(0, 4)}-YTD`,
+        kind: 'annual-rollup', metric: key, title,
+        reported: display(sourceYtd.figures[key]), calculated: report[key],
+        difference: Number(difference.toFixed(2)),
+        sheet: 'qarzhy.historical_values', cell: '', detail: title });
+    }
+  }
   let statements = { balance: null, cashflow: null };
   if (months.length) {
     const end = periodEnd(through);
