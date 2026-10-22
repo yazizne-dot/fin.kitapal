@@ -40,6 +40,9 @@ export async function inspectDatabase(pool) {
       count(*) FILTER (WHERE channel_id IS NOT NULL)::int AS mapped_channels
       FROM qarzhy.historical_series WHERE report_family='sales'`)).rows[0];
     const cashDateRanges = (await client.query(`SELECT d.kind,count(*)::int AS movements,
+      count(*) FILTER (WHERE m.organization_id IS NULL)::int AS missing_organization,
+      count(*) FILTER (WHERE m.cash_account_id IS NULL)::int AS missing_cash_account,
+      count(*) FILTER (WHERE m.article_id IS NULL)::int AS missing_article,
       min(m.occurred_on)::text AS first_date,max(m.occurred_on)::text AS last_date
       FROM qarzhy.cash_movements m JOIN qarzhy.datasets d ON d.id=m.dataset_id
       GROUP BY d.kind ORDER BY d.kind`)).rows;
