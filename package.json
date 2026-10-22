@@ -13,6 +13,7 @@
     "test:components": "node --import tsx --test tests/react/*.test.tsx features/workbook/*.test.mjs",
     "test:backend": "node scripts/run-backend-tests.mjs",
     "db:migrate": "node scripts/migrate-postgres.mjs",
+    "db:preflight": "node scripts/preflight-postgres.mjs",
     "api:dev": "node --watch backend/main.mjs",
     "api:start": "node backend/main.mjs"
   },
