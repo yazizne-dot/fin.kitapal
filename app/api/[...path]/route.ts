@@ -1,11 +1,13 @@
-import { getPortalHandler } from "../../../server/runtime";
 import { forwardApiRequest } from "../../../server/http/api-forward.mjs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 async function handle(request: Request): Promise<Response> {
-  if (process.env.API_INTERNAL_URL)
-    return forwardApiRequest(request, process.env.API_INTERNAL_URL);
-  return (await getPortalHandler())(request);
+  const backend = process.env.API_INTERNAL_URL;
+  if (!backend)
+    return Response.json({ error: "API unavailable" }, {
+      status: 503, headers: { "cache-control": "private, no-store" },
+    });
+  return forwardApiRequest(request, backend);
 }
 export {
   handle as GET,

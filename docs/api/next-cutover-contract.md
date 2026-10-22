@@ -1,6 +1,6 @@
 # Next.js to Node API cutover contract
 
-The Next.js UI uses one catch-all `/api/[...path]` handler. With `API_INTERNAL_URL` set, it forwards every API request to the standalone Node process. A partial switch is therefore user-visible even when authentication works. Keep the proxy disabled for normal users until this inventory is closed and verified in a browser.
+The Next.js UI uses one catch-all `/api/[...path]` handler and forwards every API request to the standalone Node process named by `API_INTERNAL_URL`. Without that setting, the route returns HTTP 503. The old SQLite handler is no longer on the Next.js runtime path. A browser test verifies login and report navigation against the Node API and isolated PostgreSQL; the remaining data-fidelity gaps below still prevent claiming a full production cutover.
 
 | Existing UI action | Current request | Node/PostgreSQL state | Work needed before cutover |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ The Next.js UI uses one catch-all `/api/[...path]` handler. With `API_INTERNAL_U
 
 The restored `fin` database has only consolidated historical report series. It cannot supply organization or sales-channel history by guessing from metric labels. The 2026 source-YTD P&L total matches the sum of nonzero January–August monthly revenue within imported precision, but a source-YTD row is a separate stored value and does not identify an arbitrary selected cutoff month. The UI's YTD control must use the chosen month's covered monthly intervals unless a separately verified source total applies.
 
-The Node API has no SQLite dependency. The Next.js fallback still uses SQLite until the complete proxy contract is implemented and cut over. The populated PostgreSQL database remains unchanged by this inventory.
+The Node API and Next.js request path have no SQLite dependency. Legacy SQLite modules and tests remain in the repository only as historical migration references. The applied PostgreSQL migrations and the approved January–August 2026 P&L coverage rule are documented in `fin-preflight-2026-10-22.md`.
 
 The ledger projection groups imported `sqlite/operation/<id>` event and cash rows into one operation and refuses unknown cash classifications. All 954 imported operations in the restored database classify and the September 2026 closing balance reconciles. The original relational import did not preserve `external_id`, `source`, `point`, `document` or `due` for every event-only operation. The projection displays a stable generated external ID and source reference where a document is unavailable; only documented source metadata is reused. Restore these fields into PostgreSQL before relying on full legacy row detail or enabling corrections by original external ID. The imported tax-payment article is recognized by its exact confirmed label `Салық төлемі`; changing that label without an explicit type mapping will make the projection unavailable rather than silently misclassifying payments.
 

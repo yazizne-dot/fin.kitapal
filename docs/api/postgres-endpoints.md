@@ -1,6 +1,6 @@
 # PostgreSQL Node API: current backend contract
 
-The standalone process listens on `127.0.0.1:3139` unless `API_HOST`/`API_PORT` are set. It requires `DATABASE_URL`, `PUBLIC_APP_ORIGIN`, and `CSRF_SECRET`; the latter should be a random value of at least 32 bytes. Browser traffic stays on the Next.js origin. Setting `API_INTERNAL_URL=http://127.0.0.1:3139` on the Next.js process enables its same-origin proxy; keep it unset until all portal routes are implemented. The API checks `qarzhy.schema_migrations` at startup and never runs DDL itself.
+The standalone process listens on `127.0.0.1:3139` unless `API_HOST`/`API_PORT` are set. It requires `DATABASE_URL`, `PUBLIC_APP_ORIGIN`, and `CSRF_SECRET`; the latter should be a random value of at least 32 bytes. Browser traffic stays on the Next.js origin. Set `API_INTERNAL_URL=http://127.0.0.1:3139` on the Next.js process to connect it to the Node API; without this setting, `/api/*` returns HTTP 503. The API checks `qarzhy.schema_migrations` at startup and never runs DDL itself.
 
 The remaining browser contract is tracked in [next-cutover-contract.md](next-cutover-contract.md), including the legacy ledger forms and year-to-date view.
 
@@ -64,6 +64,6 @@ All report reads and writes enforce the caller's organization scope. Mutations r
 
 The XLSX download preserves the existing report button and workbook format. The client sends its displayed rows after obtaining a session CSRF token; the Node API validates row/cell types and size, and the writer encodes text cells as strings so formula-like labels are not executed. This route does not read SQLite or Excel source data.
 
-The Next.js UI still uses the existing SQLite-backed handler when `API_INTERNAL_URL` is unset, while complete balance reconciliation, sales, import, export, and full `/api/data` compatibility routes are being implemented. Do not enable the proxy for normal UI use yet; the report and finance endpoints above can be exercised directly in the isolated test environment. The proxy forwards method, query, selected browser security headers, cookie, request body, response cookie, content type, download disposition and binary body; every response is no-store. It accepts only a loopback HTTP backend origin.
+The Next.js UI uses only the Node API for `/api/*`; it has no SQLite fallback. A browser test exercises Next login and report navigation through PostgreSQL `fin_test`. Production report fidelity still depends on verified opening snapshots, real cash accounts, and missing historical mappings. The proxy forwards method, query, selected browser security headers, cookie, request body, response cookie, content type, download disposition and binary body; every response is no-store. It accepts only a loopback HTTP backend origin.
 
 POST /api/correction accepts the ledger negative ID for a live non-cash operation, an amount, cost and reason. It reverses the original posted fact and creates a replacement atomically with an audit entry. Imported positive IDs and already reversed operations are rejected. Original document amounts and cash movements are not edited.

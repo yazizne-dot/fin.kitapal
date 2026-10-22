@@ -65,7 +65,8 @@ function report(options: Record<string, string> = {}): WorkbookData {
     },
   } as unknown as WorkbookData;
 }
-test("React workbook pages preserve actual, future, YTD and channel reports without invalid values", () => {
+test("React workbook pages preserve actual, future, YTD and channel reports without invalid values",
+  { skip: !workbookDataset }, () => {
   const scenarios: Record<string, string>[] = [
     {},
     { range: "ytd" },
@@ -96,7 +97,8 @@ test("React workbook pages preserve actual, future, YTD and channel reports with
     }
   }
 });
-test("React exports retain source references, exact amounts and missing future facts", () => {
+test("React exports retain source references, exact amounts and missing future facts",
+  { skip: !workbookDataset }, () => {
   const rows = workbookExportRows("pnl", report());
   assert.ok(rows.some((row) => row.includes("P&L_2026!J16")));
   assert.ok(rows.some((row) => row.includes(49067743.11)));
@@ -106,7 +108,8 @@ test("React exports retain source references, exact amounts and missing future f
   const balance = workbookExportRows("balance", report());
   assert.ok(balance.some((row) => row.includes(731964572.06)));
 });
-test("React escapes source labels rather than treating them as HTML", () => {
+test("React escapes source labels rather than treating them as HTML",
+  { skip: !workbookDataset }, () => {
   const data = report();
   data.details[0] = {
     ...data.details[0],
