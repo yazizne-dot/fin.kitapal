@@ -95,7 +95,8 @@ async function readLegacyLedgerData({ client, principal, filters }) {
         AND c.external_key ~ '^sqlite/operation/[1-9][0-9]*/cash$') OR EXISTS (
       SELECT 1 FROM qarzhy.payment_plans p WHERE p.organization_id=o.id) OR EXISTS (
       SELECT 1 FROM qarzhy.budget_versions v JOIN qarzhy.report_scopes s ON s.id=v.scope_id
-      WHERE s.organization_id=o.id AND v.name='Legacy ledger budget ' || v.year::text))
+      WHERE s.organization_id=o.id AND v.name='Legacy ledger budget ' || v.year::text) OR EXISTS (
+      SELECT 1 FROM qarzhy.portal_operations p WHERE p.organization_id=o.id))
     ORDER BY o.name`,
   [principal.organization_id ?? null, dataset.id])).rows;
   const matches = filters.org ? orgs.filter(row => row.name === filters.org) : [];
@@ -144,7 +145,7 @@ async function readLegacyLedgerData({ client, principal, filters }) {
     pair.cash = cash;
     grouped.set(id, pair);
   }
-  const all = [...grouped].map(([id, { event, cash }]) => {
+  const imported = [...grouped].map(([id, { event, cash }]) => {
     if (event && cash && (event.date !== cash.date || String(event.organization_id) !== String(cash.organization_id)))
       throw new FinanceError('Imported event and cash movement disagree', 503);
     const kind = classifyLegacyOperation({ eventKind: event?.event_kind,
@@ -161,7 +162,27 @@ async function readLegacyLedgerData({ client, principal, filters }) {
       document: event?.document || note.document || `sqlite/operation/${id}`,
       kind, amount: Math.abs(amount), cost: safeLegacyNumber(event?.cost, 'cost'),
       due: event?.due || '', article: event?.article || cash?.article || '' };
-  }).sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+  });
+  const portalRows = (await client.query(`SELECT p.id,p.source,p.external_id,
+    to_char(p.occurred_on,'YYYY-MM-DD') date,o.name org,p.point,p.counterparty_label,
+    p.document_label,p.kind,p.amount::text amount,p.cost::text cost,
+    to_char(p.due_date,'YYYY-MM-DD') due,p.article_label
+    FROM qarzhy.portal_operations p JOIN qarzhy.organizations o ON o.id=p.organization_id
+    LEFT JOIN qarzhy.financial_events e ON e.id=p.financial_event_id
+    LEFT JOIN qarzhy.documents d ON d.id=p.document_id
+    WHERE ($1::bigint IS NULL OR p.organization_id=$1)
+      AND (p.financial_event_id IS NULL OR e.active=true)
+      AND (p.document_id IS NULL OR d.status='posted')
+      AND NOT EXISTS (SELECT 1 FROM qarzhy.financial_events r WHERE r.reverses_event_id=e.id)
+    ORDER BY p.occurred_on,p.id`, [organizationId])).rows;
+  const all = [...imported, ...portalRows.map(row => {
+    const id = Number(row.id);
+    if (!Number.isSafeInteger(id)) throw new FinanceError('Portal operation ID exceeds safe range', 503);
+    return { id: -id, external_id: row.external_id, source: row.source,
+      date: row.date, org: row.org, point: row.point, counterparty: row.counterparty_label,
+      document: row.document_label, kind: row.kind, amount: safeLegacyNumber(row.amount, 'amount'),
+      cost: safeLegacyNumber(row.cost, 'cost'), due: row.due || '', article: row.article_label };
+  })].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   const month = selectedMonth(filters.month, all), start = `${month}-01`, end = endOfMonth(month);
   const current = all.filter(row => row.date >= start && row.date <= end);
   const through = all.filter(row => row.date <= end);

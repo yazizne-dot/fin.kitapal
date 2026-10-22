@@ -5,7 +5,7 @@ This is a read-only inspection of the user's existing PostgreSQL database on `12
 | Check | Observed |
 | --- | --- |
 | Applied schema versions | `0001_relational_finance`, `0002_relational_source_resolution` |
-| Missing for Node API | `0003_node_api_security`, `0004_report_overrides` |
+| Missing for Node API | `0003_node_api_security`, `0004_report_overrides`, `0005_portal_operations` (the last migration was added after this read-only preflight) |
 | Users / documents / payment plans | 12 / 126 / 30 |
 | Cash movements / financial events | 35,332 / 517 |
 | Historical report values | 13,019 |

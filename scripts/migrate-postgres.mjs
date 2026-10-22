@@ -18,7 +18,7 @@ try {
   const versions = (await client.query('SELECT version FROM qarzhy.schema_migrations ORDER BY version')).rows.map(row => row.version);
   console.info(`Database: ${target.database}; role: ${target.role}; versions: ${versions.join(', ')}`);
   if (mode === '--apply') {
-    for (const name of ['0003_node_api_security', '0004_report_overrides']) {
+    for (const name of ['0003_node_api_security', '0004_report_overrides', '0005_portal_operations']) {
       const sql = await readFile(new URL(`../docs/sql/migrations/${name}.sql`, import.meta.url), 'utf8');
       await client.query(sql);
       console.info(`Applied or verified ${name}`);

@@ -21,6 +21,8 @@ export async function resetTestDatabase(connectionString) {
     await client.query(migration);
     const overrides = await readFile(new URL('../../../docs/sql/migrations/0004_report_overrides.sql', import.meta.url), 'utf8');
     await client.query(overrides);
+    const operations = await readFile(new URL('../../../docs/sql/migrations/0005_portal_operations.sql', import.meta.url), 'utf8');
+    await client.query(operations);
   } finally {
     await client.end();
   }

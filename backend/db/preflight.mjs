@@ -1,5 +1,5 @@
 const REQUIRED_VERSIONS = ['0001_relational_finance', '0002_relational_source_resolution',
-  '0003_node_api_security', '0004_report_overrides'];
+  '0003_node_api_security', '0004_report_overrides', '0005_portal_operations'];
 
 export async function inspectDatabase(pool) {
   const client = await pool.connect();

@@ -5,6 +5,7 @@ import { readCookie, readJson } from './account-routes.mjs';
 import { sendJson } from './response.mjs';
 import { withTransaction } from '../db/connection.mjs';
 import { createDocument, postDocument, reverseDocument, listOperations } from '../finance/documents.mjs';
+import { createPortalOperation } from '../finance/portal-operations.mjs';
 import { recordMovement, settleDocument, listMovements } from '../finance/movements.mjs';
 import { createExpense, reviewExpense, listExpenses, listExpenseCategories, updateExpense, deleteExpense } from '../finance/expenses.mjs';
 import { savePlan, saveLegacyPlan, saveBudgetItem, saveLegacyBudget, setPeriodClosed, setLegacyPeriodClosed, listPlanning } from '../finance/planning.mjs';
@@ -31,6 +32,8 @@ export function registerFinanceRoutes(router, { pool, publicOrigin, csrfSecret }
 
   route('POST', '/api/documents', 'finance.write', async ({ client, principal, input }) =>
     ({ document: await createDocument({ client, principal, input }) }), 201);
+  route('POST', '/api/operations', 'finance.write', async ({ client, principal, input }) =>
+    ({ ok: true, operation: await createPortalOperation({ client, principal, input }) }), 201);
   route('POST', '/api/documents/post', 'finance.write', async ({ client, principal, input }) =>
     ({ document: await postDocument({ client, principal, id: input.id, version: input.version, idempotencyKey: input.idempotencyKey }) }));
   route('POST', '/api/documents/reverse', 'finance.write', async ({ client, principal, input }) =>

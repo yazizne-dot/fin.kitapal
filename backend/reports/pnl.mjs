@@ -133,6 +133,10 @@ export async function getPnlPeriod({ pool, principal, scopeId, start, end, perio
         warnings.push(`Unclassified return event: ${event.id}`);
     }
     for (const key of INPUTS) base[key] = sum(amounts[key]);
+    if (events.some(event => event.event_kind === 'depreciation')) {
+      base.otherExpense = null;
+      warnings.push('Depreciation events have no verified live P&L metric mapping');
+    }
     rows = (await pool.query(`SELECT m.id AS metric_id,m.code,m.name,o.value::text AS override_value
       FROM qarzhy.report_overrides o JOIN qarzhy.report_metrics m ON m.id=o.metric_id
       WHERE o.dataset_id=$1 AND o.scope_id=$2 AND o.report_family='pnl'

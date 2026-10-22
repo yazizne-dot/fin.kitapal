@@ -12,6 +12,7 @@ test('read-only preflight reports restored data shape and does not advance finan
     const after = (await pool.query('SELECT revision FROM qarzhy.financial_state WHERE singleton=true')).rows[0].revision;
     assert.equal(result.database, 'fin_test');
     assert.ok(result.versions.includes('0004_report_overrides'));
+    assert.ok(result.versions.includes('0005_portal_operations'));
     assert.equal(result.counts.openImportIssues, 0);
     assert.ok(result.counts.datasets >= 3);
     assert.ok(Array.isArray(result.coverage));
