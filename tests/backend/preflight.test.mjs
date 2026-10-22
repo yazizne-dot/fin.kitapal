@@ -15,6 +15,11 @@ test('read-only preflight reports restored data shape and does not advance finan
     assert.equal(result.counts.openImportIssues, 0);
     assert.ok(result.counts.datasets >= 3);
     assert.ok(Array.isArray(result.coverage));
+    assert.ok(Array.isArray(result.historicalFamilies));
+    assert.ok(Array.isArray(result.scopeSummary));
+    assert.equal(typeof result.salesDimensions.series, 'number');
+    assert.equal(typeof result.salesDimensions.mappedChannels, 'number');
+    assert.ok(Array.isArray(result.cashDateRanges));
     assert.equal(after, before);
   } finally { await pool.end(); }
 });

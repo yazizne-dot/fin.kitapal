@@ -19,7 +19,7 @@ const LABEL_KEYS = new Map([
 function metricKey(row) {
   if (row.code.startsWith('live.pnl.')) return row.code.slice('live.pnl.'.length);
   if (INPUTS.includes(row.code) || DERIVED.includes(row.code)) return row.code;
-  const label = row.name.split(':').at(-1).split('/').at(-1).trim().toUpperCase();
+  const label = row.name.split(':').at(-1).split('/').at(-1).trim().replace(/\s+/g, ' ').toUpperCase();
   for (const [prefix, key] of LABEL_KEYS) if (label === prefix || label.startsWith(`${prefix} `)) return key;
   return null;
 }

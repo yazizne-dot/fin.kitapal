@@ -32,8 +32,14 @@ test('P&L chooses historical or live coverage once and keeps source YTD separate
       bonuses: '2.00', otherIncome: '0.00', taxes: '5.00', dividends: '4.00' };
     let revenueMetricId;
     for (const [code, value] of Object.entries(figures)) {
+      const importedName = code === 'opex'
+        ? 'P&L_2026: АДМИНИСТРАТИВНЫЕ (Операционные) РАСХОДЫ/ИТОГО АДМИНИСТРАТИВНЫЕ (Операционные) РАСХОДЫ'
+        : code === 'otherExpense'
+          ? 'P&L_2026: АДМИНИСТРАТИВНЫЕ (Операционные) РАСХОДЫ/ПРОЧИЕ  РАСХОДЫ'
+          : code;
       const metric = (await pool.query(`INSERT INTO qarzhy.report_metrics(code,name,unit,calculation_kind)
-        VALUES($1,$1,'amount','input') RETURNING id`, [code])).rows[0];
+        VALUES($1,$2,'amount','input') RETURNING id`,
+      [importedName === code ? code : `imported.${code}`, importedName])).rows[0];
       if (code === 'revenue') revenueMetricId = metric.id;
       const series = (await pool.query(`INSERT INTO qarzhy.historical_series(dataset_id,scope_id,report_family,metric_id)
         VALUES($1,$2,'pnl',$3) RETURNING id`, [historical.id, scope.id, metric.id])).rows[0];
