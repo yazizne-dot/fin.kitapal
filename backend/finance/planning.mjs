@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { requirePermission, AccessError } from '../auth/guards.mjs';
 import { FinanceError, money, dateOnly, id, assertOpenPeriod } from './validation.mjs';
 import { audit } from './audit.mjs';
@@ -24,6 +25,39 @@ export async function savePlan({ client, principal, input }) {
   await audit(client, principal, 'payment_plan_create', 'payment_plan', row.id,
     { after: { amount, planned_on: plannedOn } });
   return row;
+}
+
+export async function saveLegacyPlan({ client, principal, input }) {
+  requirePermission(principal, 'finance.write');
+  const orgName = typeof input.org === 'string' ? input.org.trim() : '';
+  const articleName = typeof input.article === 'string' ? input.article.trim() : '';
+  if (!orgName || orgName.length > 160 || !articleName || articleName.length > 160)
+    throw new FinanceError('Invalid organization or article');
+  if (!Number.isSafeInteger(input.amount) || input.amount <= 0)
+    throw new FinanceError('Invalid legacy plan amount');
+  const organizations = (await client.query(`SELECT id FROM qarzhy.organizations
+    WHERE active=true AND (code=$1 OR name=$1) ORDER BY id LIMIT 2`, [orgName])).rows;
+  if (!organizations.length) throw new FinanceError('Organization not found', 404);
+  if (organizations.length > 1) throw new FinanceError('Ambiguous organization', 409);
+  const organizationId = organizations[0].id;
+  if (principal.organization_id && String(principal.organization_id) !== String(organizationId))
+    throw new AccessError('Forbidden organization');
+
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('plan-article:' || lower($1)))", [articleName]);
+  let articles = (await client.query(`SELECT id FROM qarzhy.financial_articles
+    WHERE active=true AND lower(name)=lower($1) ORDER BY id LIMIT 2`, [articleName])).rows;
+  if (articles.length > 1) throw new FinanceError('Ambiguous financial article', 409);
+  if (!articles.length) {
+    const created = (await client.query(`INSERT INTO qarzhy.financial_articles(code,name)
+      VALUES($1,$2) RETURNING id`, [`manual-plan-${randomUUID()}`, articleName])).rows[0];
+    await audit(client, principal, 'financial_article_create', 'financial_article', created.id,
+      { after: { name: articleName } });
+    articles = [created];
+  }
+  return savePlan({ client, principal, input: {
+    organizationId, articleId: articles[0].id, date: input.date,
+    direction: input.direction, amount: String(input.amount),
+  } });
 }
 
 export async function saveBudgetItem({ client, principal, input }) {

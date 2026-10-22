@@ -46,5 +46,16 @@ test('finance HTTP routes require a live session and CSRF then post one document
       'content-type': 'application/json', 'x-csrf-token': csrf }, body: JSON.stringify({ id: draft.id, reason: 'Duplicate invoice' }) });
     assert.equal(reversal.status, 200);
     assert.equal((await reversal.json()).document.status, 'reversed');
+    const legacyPlan = { date: '2026-11-12', org: 'Finance HTTP Org',
+      article: 'New finance HTTP article', direction: 'out', amount: 75 };
+    const deniedPlan = await fetch(`${base}/api/plans`, { method: 'POST', headers: {
+      origin, cookie, 'content-type': 'application/json',
+    }, body: JSON.stringify(legacyPlan) });
+    assert.equal(deniedPlan.status, 403);
+    const savedPlan = await fetch(`${base}/api/plans`, { method: 'POST', headers: {
+      origin, cookie, 'content-type': 'application/json', 'x-csrf-token': csrf,
+    }, body: JSON.stringify(legacyPlan) });
+    assert.equal(savedPlan.status, 201);
+    assert.equal((await savedPlan.json()).plan.amount, '75.00');
   } finally { await new Promise(resolve => api.close(resolve)); await pool.end(); }
 });

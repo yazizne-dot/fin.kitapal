@@ -12,7 +12,7 @@ The Next.js UI uses one catch-all `/api/[...path]` handler. With `API_INTERNAL_U
 | Legacy correction form | `POST /api/correction` | Route absent; new documents reverse by compensating facts | Preserve original posted facts and expose a correction workflow rather than editing imported or posted rows |
 | Legacy CSV import | `POST /api/import` | Route absent | Validate and classify each row, report duplicates/errors, write only to the live dataset in an audited transaction |
 | Legacy budget form | `POST /api/budget` | Route absent; new model writes draft `budget_versions`/`budget_items` | Resolve organization/metric IDs and define draft/approval behavior before wiring the unchanged form |
-| Legacy plan form | `POST /api/plans` with `{date,org,article,direction,amount}` | Path exists but expects `{organizationId,articleId,...}` | Resolve selected organization/article safely, preserve exact money and scope checks |
+| Legacy plan form | `POST /api/plans` with `{date,org,article,direction,amount}` | Compatibility adapter resolves the selected organization and reuses or creates one named article, then writes a payment plan with the existing authorization, closed-period and audit checks | Verify the full ledger screen after its read projection exists |
 | Legacy period form | `POST /api/period` with `{month,closed,reason}` | Path exists but additionally requires `organizationId` and a nonempty reason | Resolve the target organization; define behavior for the old global close control; preserve audit reason |
 | Report-number editor | `/api/finance/editor`, `/api/finance/cell` | Implemented against PostgreSQL override/history rows | Compare modal behavior and calculated totals with existing UI |
 
