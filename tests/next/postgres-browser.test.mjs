@@ -39,10 +39,12 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
     try {
       const org = (await pool.query("INSERT INTO qarzhy.organizations(code,name) VALUES('browser_org','Browser Org') RETURNING id")).rows[0];
       const scope = (await pool.query("INSERT INTO qarzhy.report_scopes(scope_type,organization_id) VALUES('organization',$1) RETURNING id", [org.id])).rows[0];
+      const consolidated = (await pool.query("SELECT id FROM qarzhy.report_scopes WHERE scope_type='consolidated'")).rows[0];
       const dataset = (await pool.query("SELECT id FROM qarzhy.datasets WHERE kind='live'")).rows[0];
       await pool.query(`INSERT INTO qarzhy.coverage_rules
         (dataset_id,scope_id,report_family,starts_on,ends_on,source_kind)
-        VALUES($1,$2,'pnl','2026-08-01','2026-09-01','events')`, [dataset.id, scope.id]);
+        VALUES($1,$2,'pnl','2026-08-01','2026-09-01','events'),
+          ($1,$3,'pnl','2026-08-01','2026-09-01','events')`, [dataset.id, scope.id, consolidated.id]);
       await pool.query(`INSERT INTO qarzhy.financial_events
         (dataset_id,scope_id,organization_id,occurred_on,event_kind,amount,posting_key)
         VALUES($1,$2,$3,'2026-08-12','revenue',100,'browser-revenue'),
@@ -54,6 +56,18 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
         (username,name,role_id,organization_id,password_salt,password_hash,must_change_password,password_changed_at)
         VALUES('browserfinance','Browser Finance',(SELECT id FROM qarzhy.roles WHERE code='finance'),
           $1,$2,$3,false,now())`, [org.id, hashed.password_salt, hashed.password_hash]);
+      const adminPassword = 'browser admin initial password 2026';
+      const adminHash = await hashPassword(adminPassword);
+      await pool.query(`INSERT INTO qarzhy.users
+        (username,name,role_id,password_salt,password_hash,must_change_password)
+        VALUES('browseradmin','Browser Admin',(SELECT id FROM qarzhy.roles WHERE code='admin'),
+          $1,$2,true)`, [adminHash.password_salt, adminHash.password_hash]);
+      const employeePassword = 'browser employee private phrase 2026';
+      const employeeHash = await hashPassword(employeePassword);
+      await pool.query(`INSERT INTO qarzhy.users
+        (username,name,role_id,organization_id,password_salt,password_hash,must_change_password,password_changed_at)
+        VALUES('browseremployee','Browser Employee',(SELECT id FROM qarzhy.roles WHERE code='employee'),
+          $1,$2,$3,false,now())`, [org.id, employeeHash.password_salt, employeeHash.password_hash]);
       const nextPort = await unusedPort();
       const origin = `http://127.0.0.1:${nextPort}`;
       const services = { pool, publicOrigin: origin, csrfSecret: randomBytes(32).toString('hex') };
@@ -110,6 +124,54 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
       assert.deepEqual(errors, []);
       assert.equal(existsSync(sqlitePath), false);
       await context.close();
+
+      const adminContext = await browser.newContext();
+      try {
+        const adminPage = await adminContext.newPage();
+        await adminPage.goto(origin);
+        await adminPage.locator('#login-form').waitFor();
+        await adminPage.locator('[name="username"]').fill('browseradmin');
+        await adminPage.locator('[name="password"]').fill(adminPassword);
+        await adminPage.locator('#login-form button[type="submit"]').click();
+        await adminPage.locator('#password-form').waitFor();
+        const previousCookie = (await adminContext.cookies()).find(cookie => cookie.name === 'qarzhy_session');
+        assert.ok(previousCookie?.httpOnly);
+        assert.equal((await adminPage.request.get(`${origin}/api/data?month=2026-08`)).status(), 403);
+        assert.equal((await adminPage.request.get(`${origin}/api/users`)).status(), 403);
+        const rotatedPassword = 'browser admin rotated password 2026';
+        await adminPage.locator('#password-form [name="current_password"]').fill(adminPassword);
+        await adminPage.locator('#password-form [name="new_password"]').fill(rotatedPassword);
+        await adminPage.locator('#password-form [name="confirmation"]').fill(rotatedPassword);
+        await adminPage.locator('#password-form button[type="submit"]').click();
+        await adminPage.locator('#password-form [role="status"]').waitFor();
+        await adminPage.waitForFunction(async () => {
+          const response = await fetch('/api/me');
+          return response.ok && (await response.json()).user.must_change_password === 0;
+        });
+        const newCookie = (await adminContext.cookies()).find(cookie => cookie.name === 'qarzhy_session');
+        assert.ok(newCookie?.httpOnly);
+        assert.notEqual(newCookie.value, previousCookie.value);
+        const report = await adminPage.request.get(`${origin}/api/data?month=2026-08`);
+        assert.equal(report.status(), 200);
+        assert.equal((await report.json()).report.profit, 60);
+        assert.equal((await adminPage.request.get(`${origin}/api/users`)).status(), 200);
+      } finally { await adminContext.close(); }
+
+      const employeeContext = await browser.newContext();
+      try {
+        const employeePage = await employeeContext.newPage();
+        await employeePage.goto(origin);
+        await employeePage.locator('#login-form').waitFor();
+        await employeePage.locator('[name="username"]').fill('browseremployee');
+        await employeePage.locator('[name="password"]').fill(employeePassword);
+        await employeePage.locator('#login-form button[type="submit"]').click();
+        await employeePage.waitForURL(url => url.pathname === '/my-expenses');
+        const personal = await employeePage.request.get(`${origin}/api/data`);
+        assert.equal(personal.status(), 200);
+        assert.equal((await personal.json()).source, 'personal');
+        assert.equal((await employeePage.request.get(`${origin}/api/users`)).status(), 403);
+        assert.equal((await employeePage.request.get(`${origin}/api/reports/pnl?scope_id=${scope.id}&start=2026-08-01&end=2026-09-01`)).status(), 403);
+      } finally { await employeeContext.close(); }
     } finally {
       await browser?.close();
       if (next && next.exitCode === null) {
