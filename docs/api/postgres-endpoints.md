@@ -2,6 +2,8 @@
 
 The standalone process listens on `127.0.0.1:3139` unless `API_HOST`/`API_PORT` are set. It requires `DATABASE_URL`, `PUBLIC_APP_ORIGIN`, and `CSRF_SECRET`; the latter should be a random value of at least 32 bytes. Browser traffic stays on the Next.js origin. Setting `API_INTERNAL_URL=http://127.0.0.1:3139` on the Next.js process enables its same-origin proxy; keep it unset until all portal routes are implemented. The API checks `qarzhy.schema_migrations` at startup and never runs DDL itself.
 
+The remaining browser contract is tracked in [next-cutover-contract.md](next-cutover-contract.md), including the legacy ledger forms and year-to-date view.
+
 | Method and path | Request | Response | PostgreSQL entities |
 | --- | --- | --- | --- |
 | `GET /health` | none | `{ok:true}` only after a DB query | `schema_migrations` at startup |
