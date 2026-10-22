@@ -71,7 +71,13 @@ async function chosenMonth(pool, scopeId, organizationId) {
   const [history, live] = await Promise.all([
     pool.query(`SELECT max(h.period_start)::text AS latest FROM qarzhy.historical_values h
       JOIN qarzhy.historical_series s ON s.id=h.series_id
-      WHERE s.scope_id=$1 AND s.report_family='pnl' AND h.period_kind='monthly'`, [scopeId]),
+      WHERE s.scope_id=$1 AND s.report_family='pnl' AND h.period_kind='monthly'
+        AND (h.value<>0 OR EXISTS (
+          SELECT 1 FROM qarzhy.coverage_rules c
+          WHERE c.scope_id=s.scope_id AND c.dataset_id=s.dataset_id
+            AND c.report_family='pnl' AND c.source_kind='historical'
+            AND c.starts_on<=h.period_start AND c.ends_on>=h.period_end
+        ))`, [scopeId]),
     pool.query(`SELECT max(occurred_on)::text AS latest FROM qarzhy.financial_events
       WHERE dataset_id=(SELECT id FROM qarzhy.datasets WHERE kind='live')
         AND ($1::bigint IS NULL OR organization_id=$1)`, [organizationId]),
@@ -85,6 +91,12 @@ async function availableMonths(pool, scopeId, organizationId, selected) {
     SELECT to_char(h.period_start,'YYYY-MM') AS month,'actual' AS kind
       FROM qarzhy.historical_values h JOIN qarzhy.historical_series s ON s.id=h.series_id
       WHERE s.scope_id=$1 AND s.report_family='pnl' AND h.period_kind='monthly'
+        AND (h.value<>0 OR EXISTS (
+          SELECT 1 FROM qarzhy.coverage_rules c
+          WHERE c.scope_id=s.scope_id AND c.dataset_id=s.dataset_id
+            AND c.report_family='pnl' AND c.source_kind='historical'
+            AND c.starts_on<=h.period_start AND c.ends_on>=h.period_end
+        ))
     UNION ALL
     SELECT to_char(e.occurred_on,'YYYY-MM'),'actual'
       FROM qarzhy.financial_events e JOIN qarzhy.datasets d ON d.id=e.dataset_id
