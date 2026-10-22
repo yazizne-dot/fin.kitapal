@@ -15,9 +15,9 @@ test('finance HTTP routes require a live session and CSRF then post one document
   await pool.query("INSERT INTO qarzhy.report_scopes(scope_type,organization_id) VALUES('organization',$1)", [org.id]);
   const customer = (await pool.query("INSERT INTO qarzhy.counterparties(name) VALUES('Finance HTTP Customer') RETURNING id")).rows[0];
   const hashed = await hashPassword('finance http private phrase 2026');
-  await pool.query(`INSERT INTO qarzhy.users(username,name,role_id,password_salt,password_hash,must_change_password,password_changed_at)
-    VALUES('financehttp','Finance HTTP',(SELECT id FROM qarzhy.roles WHERE code='finance'),$1,$2,false,now())`,
-    [hashed.password_salt, hashed.password_hash]);
+  await pool.query(`INSERT INTO qarzhy.users(username,name,role_id,organization_id,password_salt,password_hash,must_change_password,password_changed_at)
+    VALUES('financehttp','Finance HTTP',(SELECT id FROM qarzhy.roles WHERE code='finance'),$1,$2,$3,false,now())`,
+    [org.id, hashed.password_salt, hashed.password_hash]);
   const api = await startApi({ pool, port: 0, registerRoutes: router => {
     registerAccountRoutes(router, { pool, publicOrigin: origin, csrfSecret });
     registerFinanceRoutes(router, { pool, publicOrigin: origin, csrfSecret });
@@ -57,5 +57,15 @@ test('finance HTTP routes require a live session and CSRF then post one document
     }, body: JSON.stringify(legacyPlan) });
     assert.equal(savedPlan.status, 201);
     assert.equal((await savedPlan.json()).plan.amount, '75.00');
+    const closed = await fetch(`${base}/api/period`, { method: 'POST', headers: {
+      origin, cookie, 'content-type': 'application/json', 'x-csrf-token': csrf,
+    }, body: JSON.stringify({ month: '2026-11', closed: true, reason: '' }) });
+    assert.equal(closed.status, 200);
+    const closedPeriods = (await closed.json()).periods;
+    assert.deepEqual(closedPeriods.map(row => row.organization_id), [org.id]);
+    const noReopenReason = await fetch(`${base}/api/period`, { method: 'POST', headers: {
+      origin, cookie, 'content-type': 'application/json', 'x-csrf-token': csrf,
+    }, body: JSON.stringify({ month: '2026-11', closed: false, reason: '' }) });
+    assert.equal(noReopenReason.status, 422);
   } finally { await new Promise(resolve => api.close(resolve)); await pool.end(); }
 });

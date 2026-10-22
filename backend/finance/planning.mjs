@@ -105,6 +105,24 @@ export async function setPeriodClosed({ client, principal, organizationId: organ
   return row;
 }
 
+export async function setLegacyPeriodClosed({ client, principal, input }) {
+  requirePermission(principal, 'finance.write');
+  const month = monthStart(input.month);
+  if (typeof input.closed !== 'boolean' || typeof input.reason !== 'string')
+    throw new FinanceError('Invalid period state or reason');
+  const reason = input.reason.trim() || (input.closed ? 'Closed from legacy period form' : '');
+  if (!reason || reason.length > 2000) throw new FinanceError('Period change reason is required');
+  const organizations = (await client.query(`SELECT id FROM qarzhy.organizations
+    WHERE ($1::bigint IS NULL OR id=$1) ORDER BY id`, [principal.organization_id ?? null])).rows;
+  if (!organizations.length) throw new FinanceError('Organization not found', 404);
+  const periods = [];
+  for (const organization of organizations) periods.push(await setPeriodClosed({
+    client, principal, organizationId: organization.id, month,
+    closed: input.closed, reason,
+  }));
+  return { periods };
+}
+
 export async function listPlanning({ pool, principal, organizationId }) {
   requirePermission(principal, 'finance.read');
   const scoped = principal.organization_id ?? organizationId;

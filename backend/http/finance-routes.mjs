@@ -7,7 +7,7 @@ import { withTransaction } from '../db/connection.mjs';
 import { createDocument, postDocument, reverseDocument, listOperations } from '../finance/documents.mjs';
 import { recordMovement, settleDocument, listMovements } from '../finance/movements.mjs';
 import { createExpense, reviewExpense, listExpenses, listExpenseCategories, updateExpense, deleteExpense } from '../finance/expenses.mjs';
-import { savePlan, saveLegacyPlan, saveBudgetItem, setPeriodClosed, listPlanning } from '../finance/planning.mjs';
+import { savePlan, saveLegacyPlan, saveBudgetItem, setPeriodClosed, setLegacyPeriodClosed, listPlanning } from '../finance/planning.mjs';
 
 export function registerFinanceRoutes(router, { pool, publicOrigin, csrfSecret }) {
   const security = { origin: publicOrigin, csrfSecret };
@@ -85,8 +85,10 @@ export function registerFinanceRoutes(router, { pool, publicOrigin, csrfSecret }
   route('POST', '/api/budget/items', 'finance.write', async ({ client, principal, input }) =>
     ({ item: await saveBudgetItem({ client, principal, input }) }));
   route('POST', '/api/period', 'finance.write', async ({ client, principal, input }) =>
-    ({ period: await setPeriodClosed({ client, principal, organizationId: input.organizationId,
-      month: input.month, closed: input.closed, reason: input.reason }) }));
+    input.organizationId === undefined
+      ? { ok: true, ...await setLegacyPeriodClosed({ client, principal, input }) }
+      : { period: await setPeriodClosed({ client, principal, organizationId: input.organizationId,
+        month: input.month, closed: input.closed, reason: input.reason }) });
   router.add('GET', '/api/plans', async ({ request, response, requestId }) => {
     const principal = requirePermission(await principalFor(request), 'finance.read');
     const organizationId = new URL(request.url, 'http://localhost').searchParams.get('organization_id');
