@@ -115,9 +115,16 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
       const report = await page.request.get(`${origin}/api/data?month=2026-08`);
       assert.equal(report.status(), 200);
       assert.equal((await report.json()).report.profit, 60);
-      for (const section of ['pnl', 'operations', 'account']) {
-        await page.locator(`[data-page="${section}"]`).first().click();
+      for (const section of ['pnl', 'balance', 'cashflow', 'analytics', 'plans',
+        'operations', 'checks', 'imports', 'settings', 'debts',
+        'users', 'employee-expenses', 'financial-entries', 'admin-audit', 'account']) {
+        await page.goto(`${origin}/${section}?month=2026-08`);
         await page.waitForURL(url => url.pathname === `/${section}`);
+        await page.locator('.content').waitFor();
+        assert.doesNotMatch(await page.locator('.content').innerText(), /\bNaN\b|\bundefined\b/);
+      }
+      for (const section of ['audit', 'my-expenses']) {
+        await page.goto(`${origin}/${section}?source=ledger&month=2026-09`);
         await page.locator('.content').waitFor();
         assert.doesNotMatch(await page.locator('.content').innerText(), /\bNaN\b|\bundefined\b/);
       }
@@ -133,10 +140,21 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
       const corrected = await page.request.get(`${origin}/api/data?month=2026-08`);
       assert.equal(corrected.status(), 200);
       assert.equal((await corrected.json()).report.profit, 80);
-      await page.locator('[data-page="pnl"]').first().click();
-      await page.waitForURL(url => url.pathname === '/pnl');
+      await page.goto(`${origin}/pnl?month=2026-08`);
+      assert.match(await page.locator('.workbook-pill').innerText(), /PostgreSQL/);
       const profitRow = page.locator('.wb-pnl tr.total').filter({ has: page.locator('[data-wb-drill="profit"]') });
       assert.match(await profitRow.innerText(), /80/);
+      await page.locator('[data-wb-range="ytd"]').click();
+      await page.waitForURL(url => url.searchParams.get('range') === 'ytd');
+      const yearToDate = await page.request.get(`${origin}/api/data?month=2026-08&range=ytd`);
+      assert.equal(yearToDate.status(), 200);
+      const yearToDateData = await yearToDate.json();
+      assert.equal(yearToDateData.actualAvailable, false);
+      assert.ok(yearToDateData.checks.some(check => /YTD P&L requires covered monthly/i.test(check.title)));
+      await page.locator('button.source-warning[data-page="checks"]').waitFor();
+      assert.doesNotMatch(await page.locator('.content').innerText(), /\bNaN\b|\bundefined\b/);
+      await page.locator('[data-wb-range="month"]').click();
+      await page.waitForURL(url => url.searchParams.get('range') !== 'ytd');
       const events = await pool.query("SELECT event_kind,amount::text FROM qarzhy.financial_events ORDER BY event_kind");
       assert.deepEqual(events.rows, [
         { event_kind: 'cost', amount: '40' },
@@ -187,6 +205,53 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
         { status: 'posted', amount: '600.00' },
       ]);
       assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.cash_movements')).rows[0].n, 0);
+      await page.goto(`${origin}/plans?source=ledger&month=2026-09`);
+      await page.locator('[data-action="add-plan"]').click();
+      const planForm = page.locator('#plan-form');
+      await planForm.locator('[name="date"]').fill('2026-09-12');
+      await planForm.locator('[name="org"]').selectOption('Browser Org');
+      await planForm.locator('[name="direction"]').selectOption('in');
+      await planForm.locator('[name="amount"]').fill('700');
+      await planForm.locator('[name="article"]').fill('Browser Plan');
+      await planForm.locator('button[type="submit"]').click();
+      await planForm.waitFor({ state: 'hidden' });
+      assert.equal((await pool.query("SELECT count(*)::int AS n FROM qarzhy.payment_plans WHERE amount=700")).rows[0].n, 1);
+      await page.goto(`${origin}/pnl?source=ledger&month=2026-09`);
+      await page.locator('[data-action="budget"]').click();
+      const budgetForm = page.locator('#budget-form');
+      await budgetForm.locator('[name="org"]').selectOption('Browser Org');
+      await budgetForm.locator('[name="metric"]').selectOption('revenue');
+      await budgetForm.locator('[name="amount"]').fill('900');
+      await budgetForm.locator('button[type="submit"]').click();
+      await budgetForm.waitFor({ state: 'hidden' });
+      assert.match(await page.locator('.content').innerText(), /900/);
+      await page.goto(`${origin}/imports?source=ledger&month=2026-09`);
+      await page.locator('[data-action="import"]').first().click();
+      const importForm = page.locator('#import-form');
+      const csv = 'external_id,source,date,org,point,counterparty,document,kind,amount,cost,due,article\n' +
+        'browser-csv-1,browser,2026-09-13,Browser Org,Center,Buyer Three,SALE-CSV-1,sale,300,100,2026-09-30,Books\n';
+      await importForm.locator('#csv-file').setInputFiles({ name: 'browser.csv',
+        mimeType: 'text/csv', buffer: Buffer.from(csv) });
+      await importForm.locator('[data-action="run-import"]').click();
+      await importForm.locator('#import-result').waitFor();
+      assert.match(await importForm.locator('#import-result').innerText(), /1/);
+      assert.equal((await pool.query("SELECT count(*)::int AS n FROM qarzhy.portal_operations WHERE external_id='browser-csv-1'")).rows[0].n, 1);
+      await importForm.locator('[data-action="run-import"]').click();
+      await page.waitForFunction(() => document.querySelector('#import-result b')?.textContent === '0');
+      assert.deepEqual(await importForm.locator('#import-result b').allInnerTexts(), ['0', '1', '0']);
+      assert.equal((await pool.query("SELECT count(*)::int AS n FROM qarzhy.portal_operations WHERE external_id='browser-csv-1'")).rows[0].n, 1);
+      await page.goto(`${origin}/settings?source=ledger&month=2026-09`);
+      await page.locator('[data-action="period"]').click();
+      const periodForm = page.locator('#period-form');
+      await periodForm.locator('button[type="submit"]').click();
+      await periodForm.waitFor({ state: 'hidden' });
+      assert.equal((await pool.query("SELECT count(*)::int AS n FROM qarzhy.accounting_periods WHERE starts_on='2026-09-01' AND closed=true")).rows[0].n, 1);
+      await page.locator('[data-action="period"]').click();
+      const reopenForm = page.locator('#period-form');
+      await reopenForm.locator('[name="reason"]').fill('Browser acceptance test');
+      await reopenForm.locator('button[type="submit"]').click();
+      await reopenForm.waitFor({ state: 'hidden' });
+      assert.equal((await pool.query("SELECT count(*)::int AS n FROM qarzhy.accounting_periods WHERE starts_on='2026-09-01' AND closed=false")).rows[0].n, 1);
       assert.deepEqual(errors, []);
       assert.equal(existsSync(sqlitePath), false);
       await context.close();

@@ -217,11 +217,16 @@ export function Pnl({ data, navigate, onDrill, onDetail }: ReportContext) {
   const [expanded, setExpanded] = useState<MetricKey[]>([]);
   if (!data.actualAvailable)
     return (
-      <Empty
-        title="P&L фактісі жоқ"
-        text="Таңдалған айға бастапқы файлда нақты есеп берілмеген. Нөл сомаларды факт ретінде көрсетпейміз."
-        navigate={navigate}
-      />
+      <>
+        <Warning data={data} navigate={navigate} />
+        <Empty
+          title="P&L фактісі жоқ"
+          text={data.metadata.file.startsWith("PostgreSQL")
+            ? "Бұл кезеңге PostgreSQL деректері немесе есепті қамту ережесі табылмады."
+            : "Таңдалған айға бастапқы файлда нақты есеп берілмеген. Нөл сомаларды факт ретінде көрсетпейміз."}
+          navigate={navigate}
+        />
+      </>
     );
   return (
     <>

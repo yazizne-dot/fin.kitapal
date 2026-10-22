@@ -248,7 +248,7 @@ export function WorkbookView({
           </div>
         </div>
         <span className="demo-pill workbook-pill">
-          <i className="dot" /> Excel · {data.latest}
+          <i className="dot" /> PostgreSQL · {data.latest}
         </span>
       </div>
       {error && (
@@ -263,7 +263,7 @@ export function WorkbookView({
             <>
               <div className="drill-totals">
                 <div>
-                  <small>{t("Excel қорытындысы")}</small>
+                  <small>{t("Есеп қорытындысы")}</small>
                   <b>{money(data.report[key])}</b>
                 </div>
                 <div>
@@ -273,7 +273,7 @@ export function WorkbookView({
               </div>
               <p className="note">
                 {t(
-                  "Бастапқы операциялар емес, Excel есебінің баптары. Сандардың парағы мен ұяшығы сақталған.",
+                  "Есеп баптарының дереккөздері төменде көрсетілген. Бастапқы құжаттар өзгертілмеген.",
                 )}
               </p>
               {Boolean(data.refs[key]?.length) && (

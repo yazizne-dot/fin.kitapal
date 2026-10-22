@@ -194,7 +194,7 @@ export function Warning({
             : t("Бастапқы файлда тексерілетін мәндер бар")}
         </b>
         <small>
-          {t("Көрсеткіштер Excel-дегі қорытындымен берілген.")}{" "}
+          {t("Есеп деректері PostgreSQL-де сақталған.")}{" "}
           {data.checks.length} {t("тексеру ескертпесі")}.
         </small>
       </span>
@@ -221,7 +221,7 @@ export function SourceFooter({ data }: { data: WorkbookData }) {
             )
           : t(
               data.metadata.method ||
-                "Excel-де сақталған мәндер; түпнұсқа файл өзгертілмеген",
+                "PostgreSQL-де сақталған мәндер; бастапқы құжаттар өзгертілмеген",
             )}
         {data.range === "ytd" && (
           <>

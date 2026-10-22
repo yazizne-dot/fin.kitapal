@@ -24,4 +24,4 @@ Backend integration tests reset **only** a database named `fin_test`. Set `TEST_
 
 Useful focused commands are `npm run test:backend`, `npm run test:next`, `npm run test:components`, `npm run typecheck`, and `npm run build`. The three React tests tied to the old private workbook extraction skip when that untracked source file is absent; PostgreSQL report behavior is covered by the backend tests. The old SQLite browser suite and MVP instructions are archived under [`tests/legacy-next/`](tests/legacy-next/) and [`docs/legacy-sqlite-readme.md`](docs/legacy-sqlite-readme.md).
 
-See [`docs/api/next-cutover-contract.md`](docs/api/next-cutover-contract.md) for the remaining report fidelity gaps and [`docs/api/fin-preflight-2026-10-22.md`](docs/api/fin-preflight-2026-10-22.md) for the restored database findings.
+For manual acceptance, follow [`docs/api/user-acceptance-checklist.md`](docs/api/user-acceptance-checklist.md). See [`docs/api/next-cutover-contract.md`](docs/api/next-cutover-contract.md) for the remaining report fidelity gaps and [`docs/api/fin-preflight-2026-10-22.md`](docs/api/fin-preflight-2026-10-22.md) for the restored database findings.
