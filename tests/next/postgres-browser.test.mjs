@@ -145,6 +145,48 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
       assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.documents')).rows[0].n, 0);
       assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.cash_movements')).rows[0].n, 0);
       assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.report_override_history')).rows[0].n, 1);
+      const csrf = await page.request.get(`${origin}/api/csrf`);
+      assert.equal(csrf.status(), 200);
+      const { csrf_token: csrfToken } = await csrf.json();
+      const seeded = await page.request.post(`${origin}/api/operations`, {
+        headers: { origin, 'x-csrf-token': csrfToken },
+        data: { source: 'manual', external_id: 'browser-ledger-seed', date: '2026-09-05',
+          org: 'Browser Org', point: 'Center', counterparty: 'Buyer One', document: 'SALE-LEDGER-1',
+          kind: 'sale', amount: 1000, cost: 400, due: '2026-09-25', article: 'Books' },
+      });
+      assert.equal(seeded.status(), 201);
+      await page.goto(`${origin}/operations?source=ledger&month=2026-09`);
+      await page.locator('#ops-table').waitFor();
+      assert.match(await page.locator('#ops-table').innerText(), /SALE-LEDGER-1/);
+      await page.locator('[data-action="add-operation"]').click();
+      const operationForm = page.locator('#operation-form');
+      await operationForm.locator('[name="date"]').fill('2026-09-06');
+      await operationForm.locator('[name="kind"]').selectOption('sale');
+      await operationForm.locator('[name="org"]').selectOption('Browser Org');
+      await operationForm.locator('[name="amount"]').fill('500');
+      await operationForm.locator('[name="cost"]').fill('200');
+      await operationForm.locator('[name="counterparty"]').fill('Buyer Two');
+      await operationForm.locator('[name="document"]').fill('SALE-LEDGER-2');
+      await operationForm.locator('[name="article"]').fill('Books');
+      await operationForm.locator('button[type="submit"]').click();
+      await operationForm.waitFor({ state: 'hidden' });
+      assert.match(await page.locator('#ops-table').innerText(), /SALE-LEDGER-2/);
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.portal_operations')).rows[0].n, 2);
+      await page.locator('#ops-table tr').filter({ hasText: 'SALE-LEDGER-2' }).locator('[data-correct]').click();
+      const correctionForm = page.locator('#correction-form');
+      await correctionForm.locator('[name="amount"]').fill('600');
+      await correctionForm.locator('[name="cost"]').fill('250');
+      await correctionForm.locator('[name="reason"]').fill('Browser ledger correction');
+      await correctionForm.locator('button[type="submit"]').click();
+      await correctionForm.waitFor({ state: 'hidden' });
+      assert.match(await page.locator('#ops-table tr').filter({ hasText: 'SALE-LEDGER-2' }).innerText(), /600/);
+      const correctedDocuments = (await pool.query(`SELECT status,total_amount::text AS amount
+        FROM qarzhy.documents WHERE number='SALE-LEDGER-2' ORDER BY id`)).rows;
+      assert.deepEqual(correctedDocuments, [
+        { status: 'reversed', amount: '500.00' },
+        { status: 'posted', amount: '600.00' },
+      ]);
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.cash_movements')).rows[0].n, 0);
       assert.deepEqual(errors, []);
       assert.equal(existsSync(sqlitePath), false);
       await context.close();
