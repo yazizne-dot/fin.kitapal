@@ -113,7 +113,9 @@ test('finance portal P&L uses effective PostgreSQL figures and reports missing c
       const response = await fetch(`${base}/api/data?month=2031-04`, { headers: { cookie } });
       assert.equal(response.status, 200);
       assert.equal((await response.json()).report.profit, 90.05);
-      assert.equal((await fetch(`${base}/api/data?month=2031-04&source=ledger`, { headers: { cookie } })).status, 503);
+      const legacy = await fetch(`${base}/api/data?month=2031-04&source=ledger`, { headers: { cookie } });
+      assert.equal(legacy.status, 200);
+      assert.equal((await legacy.json()).source, 'ledger');
     } finally { await new Promise(resolve => api.close(resolve)); }
   } finally { await pool.end(); }
 });
