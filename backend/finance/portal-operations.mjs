@@ -97,7 +97,7 @@ export async function createPortalOperation({ client, principal, input }) {
   const normalized = { kind, date, amount, cost, point, counterparty, document, due, article };
   if (existing) {
     if (!sameOperation(existing, normalized, organizationId)) throw new FinanceError('Idempotency key conflict', 409);
-    return existing;
+    return { ...existing, duplicate: true };
   }
   // Imported SQLite did not identify a cash account; the live schema requires a real one.
   if (CASH_KINDS.has(kind)) throw new FinanceError('Cash account selection is required before posting this operation', 422);
@@ -140,5 +140,5 @@ export async function createPortalOperation({ client, principal, input }) {
     counterparty, document, due || null, article, documentId, eventId, principal.id])).rows[0];
   await audit(client, principal, 'portal_operation_create', 'portal_operation', saved.id,
     { after: { source, external_id: externalId, kind, amount, cost, document } });
-  return saved;
+  return { ...saved, duplicate: false };
 }

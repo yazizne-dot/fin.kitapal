@@ -25,7 +25,8 @@ test('portal operation posts one live sale, is idempotent, and rejects cash with
       const first = await withTransaction(pool, client => createPortalOperation({ client, principal, input }));
       const repeat = await withTransaction(pool, client => createPortalOperation({ client, principal, input }));
       assert.equal(first.id, repeat.id);
-      assert.equal((await pool.query('SELECT count(*)::int n FROM qarzhy.portal_operations')).rows[0].n, 1);
+      assert.equal((await pool.query(`SELECT count(*)::int n FROM qarzhy.portal_operations
+        WHERE organization_id=$1`, [org.id])).rows[0].n, 1);
       assert.equal((await pool.query('SELECT count(*)::int n FROM qarzhy.financial_events WHERE document_id=$1', [first.document_id])).rows[0].n, 1);
       const data = await buildLegacyLedgerData({ pool, principal, filters: { month: '2035-04' } });
       assert.equal(data.operations.length, 1);

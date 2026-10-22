@@ -34,6 +34,7 @@ Development integration tests require `TEST_DATABASE_URL` ending in `/fin_test`;
 | `GET/POST/PATCH /api/expenses` | Employee expenses, owner edit/delete, and finance review; existing UI cents/category fields map to exact PostgreSQL money/article IDs |
 | `GET /api/data` | Employee personal view, covered finance P&L month, or imported and newly posted ledger operations with scoped filters; other finance sections are still incomplete |
 | `POST /api/operations` | Idempotent legacy form adapter for sale, sale return, purchase, expense, tax and depreciation; preserves form metadata alongside live facts |
+| `POST /api/import` | Same operation adapter for up to 5000 CSV rows; returns added, duplicate and per-row error counts within one audited transaction |
 | `GET /api/finance/audit` | Last 100 audit actions for accounts-management permission; displays actor/action/reason without raw before/after JSON |
 | `POST /api/export` | Download the currently displayed report rows as XLSX; requires finance session, exact Origin and session CSRF token |
 | `GET/POST /api/plans`, `POST /api/budget`, `POST /api/budget/items`, `POST /api/period` | Plans, organization budget drafts, and period closure |
