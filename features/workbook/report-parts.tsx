@@ -338,7 +338,9 @@ export function TrendChart({ data }: { data: WorkbookData }) {
           <h2>{t("Сату динамикасы")}</h2>
           <p>
             {data.month.slice(0, 4)}{" "}
-            {t("жыл · файлда бар айлардың нақты нәтижесі")}
+            {t(data.metadata.file.startsWith("PostgreSQL")
+              ? "жыл · PostgreSQL-де қамтылған айлардың нақты нәтижесі"
+              : "жыл · файлда бар айлардың нақты нәтижесі")}
           </p>
         </div>
         <div className="segmented">

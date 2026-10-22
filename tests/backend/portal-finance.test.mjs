@@ -25,16 +25,24 @@ test('finance portal P&L uses effective PostgreSQL figures and reports missing c
     assert.ok(missing.checks.length);
     await pool.query(`INSERT INTO qarzhy.coverage_rules(dataset_id,scope_id,report_family,starts_on,ends_on,source_kind)
       VALUES($1,$2,'pnl','2031-04-01','2031-05-01','events')`, [dataset.id, scope.id]);
+    await pool.query(`INSERT INTO qarzhy.coverage_rules(dataset_id,scope_id,report_family,starts_on,ends_on,source_kind)
+      VALUES($1,$2,'pnl','2031-03-01','2031-04-01','events'),
+            ($1,$2,'pnl','2030-04-01','2030-05-01','events')`, [dataset.id, scope.id]);
     await pool.query(`INSERT INTO qarzhy.financial_events(dataset_id,scope_id,organization_id,occurred_on,event_kind,amount,posting_key)
       VALUES($1,$2,$3,'2031-04-12','revenue',100.10,'portal-finance-revenue'),
-            ($1,$2,$3,'2031-04-12','cost',30.05,'portal-finance-cost')`, [dataset.id, scope.id, org.id]);
+            ($1,$2,$3,'2031-04-12','cost',30.05,'portal-finance-cost'),
+            ($1,$2,$3,'2031-03-12','revenue',50.00,'portal-finance-march-revenue'),
+            ($1,$2,$3,'2030-04-12','revenue',80.00,'portal-finance-prior-revenue')`, [dataset.id, scope.id, org.id]);
     const data = await buildPortalFinanceData({ pool, principal, filters: { month: '2031-04' } });
     assert.equal(data.month, '2031-04');
     assert.equal(data.report.revenue, 100.10);
     assert.equal(data.report.gross, 70.05);
     assert.equal(data.report.profit, 70.05);
     assert.equal(data.actualAvailable, true);
-    assert.deepEqual(data.periods, ['2031-04']);
+    assert.deepEqual(data.history.map(row => row.month), ['2031-03', '2031-04']);
+    assert.equal(data.history[0].revenue, 50);
+    assert.equal(data.previous.revenue, 80);
+    assert.deepEqual(data.periods, ['2030-04', '2031-03', '2031-04']);
     const account = (await pool.query(`INSERT INTO qarzhy.cash_accounts(organization_id,code,name,account_type)
       VALUES($1,'portal_finance_cash','Portal Finance Cash','bank') RETURNING id`, [org.id])).rows[0];
     const snapshot = (await pool.query(`INSERT INTO qarzhy.balance_snapshots(dataset_id,scope_id,as_of_date,label,status)
@@ -88,7 +96,7 @@ test('finance portal P&L uses effective PostgreSQL figures and reports missing c
     assert.equal(opexBudget.plan, 20);
     assert.equal(opexBudget.actual, 0);
     assert.equal(budgeted.budgetTimeline[0].plan, 20);
-    assert.deepEqual(budgeted.periods, ['2031-04', '2031-05']);
+    assert.deepEqual(budgeted.periods, ['2030-04', '2031-03', '2031-04', '2031-05']);
     assert.equal(budgeted.budgetRows.find(row => row.label.includes('Budget Article')).actual, null);
     assert.match(budgeted.checks.map(row => row.title).join(' '), /matching rule/i);
     const origin = 'http://127.0.0.1:3000';

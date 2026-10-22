@@ -99,6 +99,13 @@ async function availableMonths(pool, scopeId, organizationId, selected) {
   return { periods, latestActual: latestActual ?? selected };
 }
 
+async function comparablePnl({ pool, principal, scopeId, month, source }) {
+  const period = await getPnlPeriod({ pool, principal, scopeId,
+    start: `${month}-01`, end: periodEnd(month), source });
+  if (!period.source || period.figures.revenue === null || period.figures.cost === null) return null;
+  return Object.fromEntries(METRICS.map(key => [key, display(period.figures[key])]));
+}
+
 export async function buildPortalFinanceData({ pool, principal, filters = {} }) {
   requirePermission(principal, 'finance.read');
   if (filters.org) throw new FinanceError('This report filter is not available yet', 503);
@@ -114,9 +121,10 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
     throw new FinanceError('Invalid report month');
   const start = `${month}-01`, end = periodEnd(month);
   const available = await availableMonths(pool, scope.id, scope.organization_id, month);
+  const pnlSource = filters.source === 'workbook' ? 'historical' : 'auto';
   const [pnl, balance, cashflow] = await Promise.all([
     getPnlPeriod({ pool, principal, scopeId: scope.id, start, end,
-      source: filters.source === 'workbook' ? 'historical' : 'auto' }),
+      source: pnlSource }),
     getBalanceAt({ pool, principal, scopeId: scope.id, asOf: end }),
     getCashflowPeriod({ pool, principal, scopeId: scope.id, start, end }),
   ]);
@@ -133,6 +141,17 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
     report.cost = selectedChannel.cost;
     report.gross = selectedChannel.gross;
   }
+  const historyMonths = available.periods.filter(value => value.slice(0, 4) === month.slice(0, 4) &&
+    value <= month).slice(-12);
+  const pastMonths = historyMonths.filter(value => value !== month);
+  const pastReports = await Promise.all(pastMonths.map(value => comparablePnl({ pool, principal,
+    scopeId: scope.id, month: value, source: pnlSource })));
+  const history = pastMonths.flatMap((value, index) => pastReports[index]
+    ? [{ month: value, ...pastReports[index] }] : []);
+  if (pnl.source && report.revenue !== null && report.cost !== null) history.push({ month, ...report });
+  const priorMonth = `${String(Number(month.slice(0, 4)) - 1).padStart(4, '0')}${month.slice(4)}`;
+  const previous = selectedChannel ? null : await comparablePnl({ pool, principal,
+    scopeId: scope.id, month: priorMonth, source: pnlSource });
   const details = pnl.rows.filter(row => row.key && row.value !== undefined).map(row => {
     const source = { sheet: 'qarzhy.report_metrics', cell: String(row.metric_id), period: month,
       value: display(row.original), raw: row.original };
@@ -163,8 +182,8 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
     month, range: 'month', aggregation: 'PostgreSQL', channel: channelId,
     periods: available.periods, latest: available.latestActual,
     actualThrough: actualAvailable ? month : null, actualAvailable, report, recalculated: null,
-    previous: null, details: selectedChannel ? [] : details, refs: selectedChannel ? {} : refs,
-    channels, history: actualAvailable ? [{ month, ...report }] : [],
+    previous, details: selectedChannel ? [] : details, refs: selectedChannel ? {} : refs,
+    channels, history: selectedChannel ? (actualAvailable ? [{ month, ...report }] : []) : history,
     budgetRows: selectedChannel ? [] : budget.rows,
     budgetTimeline: selectedChannel ? [] : budget.timeline, checks, allCheckCount: checks.length,
     metadata: { file: 'PostgreSQL qarzhy', method: 'Relational finance reports', unit: 'KZT',
