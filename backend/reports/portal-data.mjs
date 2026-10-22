@@ -1,5 +1,5 @@
 import { requirePermission } from '../auth/guards.mjs';
-import { FinanceError } from '../finance/validation.mjs';
+import { Exact, FinanceError } from '../finance/validation.mjs';
 import { getPnlPeriod } from './pnl.mjs';
 import { getCashflowPeriod } from './cashflow.mjs';
 import { getBalanceAt } from './balance.mjs';
@@ -118,10 +118,86 @@ async function comparablePnl({ pool, principal, scopeId, month, source }) {
   return Object.fromEntries(METRICS.map(key => [key, display(period.figures[key])]));
 }
 
+function yearMonths(year, through) {
+  return Array.from({ length: Number(through.slice(5)) }, (_, index) =>
+    `${year}-${String(index + 1).padStart(2, '0')}`);
+}
+
+function sumMonthly(periods, key) {
+  if (!periods.length || periods.some(period => !period.source || period.figures[key] === null)) return null;
+  return Number(periods.reduce((sum, period) => sum.plus(period.figures[key]), new Exact(0)).toFixed(2));
+}
+
+async function buildYearToDate({ pool, principal, filters, scope, month, available, source }) {
+  if (filters.channel) throw new FinanceError('YTD channel breakdown is not available yet', 503);
+  const latest = available.latestActual;
+  const through = latest.slice(0, 4) === month.slice(0, 4) && latest < month ? latest : month;
+  const months = through.slice(0, 4) === month.slice(0, 4) ? yearMonths(month.slice(0, 4), through) : [];
+  const priorYear = String(Number(month.slice(0, 4)) - 1).padStart(4, '0');
+  const [base, current, prior] = await Promise.all([
+    buildPortalFinanceData({ pool, principal, filters: { ...filters, range: 'month', channel: '' } }),
+    Promise.all(months.map(value => getPnlPeriod({ pool, principal, scopeId: scope.id,
+      start: `${value}-01`, end: periodEnd(value), source }))),
+    Promise.all(months.map(value => getPnlPeriod({ pool, principal, scopeId: scope.id,
+      start: `${priorYear}${value.slice(4)}-01`, end: periodEnd(`${priorYear}${value.slice(4)}`), source }))),
+  ]);
+  const complete = current.length > 0 && current.every(period => period.source &&
+    period.figures.revenue !== null && period.figures.cost !== null);
+  const report = Object.fromEntries(METRICS.map(key => [key, complete ? sumMonthly(current, key) : null]));
+  const previous = prior.length && prior.every(period => period.source)
+    ? Object.fromEntries(METRICS.map(key => [key, sumMonthly(prior, key)])) : null;
+  const history = current.flatMap((period, index) => period.source && period.figures.revenue !== null
+    ? [{ month: months[index], ...Object.fromEntries(METRICS.map(key => [key, display(period.figures[key])])) }] : []);
+  const details = current.flatMap((period, index) => period.rows
+    .filter(row => row.key && row.value !== undefined)
+    .map(row => ({ id: `${months[index]}-${row.metric_id}`, label: row.name, display: row.name,
+      group: row.key, value: display(row.value), manual: row.override_value !== null,
+      sources: [{ sheet: 'qarzhy.report_metrics', cell: String(row.metric_id),
+        period: months[index], value: display(row.original), raw: row.original }] })));
+  const refs = {};
+  for (const row of details) (refs[row.group] ??= []).push(...row.sources);
+  const warnings = current.flatMap((period, index) => period.warnings.map(warning =>
+    `${months[index]}: ${warning}`));
+  if (!complete) warnings.push('YTD P&L requires covered monthly figures from January through the selected month');
+  warnings.push('YTD budget and channel totals require separately verified coverage');
+  const checks = warnings.map((warning, index) => ({
+    id: `ytd-${index}`, period: month, kind: 'coverage', title: warning,
+    reported: null, calculated: null, difference: null,
+    sheet: 'qarzhy.coverage_rules', cell: '', detail: warning,
+  }));
+  let statements = { balance: null, cashflow: null };
+  if (months.length) {
+    const end = periodEnd(through);
+    const [balance, cashflow] = await Promise.all([
+      getBalanceAt({ pool, principal, scopeId: scope.id, asOf: end }),
+      getCashflowPeriod({ pool, principal, scopeId: scope.id,
+        start: `${month.slice(0, 4)}-01-01`, end }),
+    ]);
+    const shown = presentCashflow(cashflow, balance, month);
+    statements = { balance: presentBalance(balance), cashflow: shown
+      ? { ...shown, range: 'ytd', periods: months } : null };
+    for (const warning of [...balance.warnings, ...cashflow.warnings]) checks.push({
+      id: `ytd-${checks.length}`, period: month, kind: 'coverage', title: warning,
+      reported: null, calculated: null, difference: null,
+      sheet: 'qarzhy.coverage_rules', cell: '', detail: warning,
+    });
+  }
+  const overrideCount = months.length ? (await pool.query(`SELECT count(*)::int AS n FROM qarzhy.report_overrides
+    WHERE scope_id=$1 AND report_family='pnl' AND period_kind='monthly'
+      AND period_start >= $2 AND period_end <= $3`,
+  [scope.id, `${month.slice(0, 4)}-01-01`, periodEnd(through)])).rows[0].n : 0;
+  return { ...base, range: 'ytd', aggregation: 'monthly-sum', actualThrough: complete ? through : null,
+    actualAvailable: complete, report, previous, history, details, refs,
+    budgetRows: [], budgetTimeline: [], channels: [], checks, allCheckCount: checks.length,
+    statements, overrideCount,
+    metadata: { ...base.metadata, method: 'Sum of covered monthly PostgreSQL P&L figures',
+      limitations: checks.map(row => row.title) } };
+}
+
 export async function buildPortalFinanceData({ pool, principal, filters = {} }) {
   requirePermission(principal, 'finance.read');
   if (filters.org) throw new FinanceError('This report filter is not available yet', 503);
-  if (filters.range && filters.range !== 'month') throw new FinanceError('This report range is not available yet', 503);
+  if (filters.range && !['month', 'ytd'].includes(filters.range)) throw new FinanceError('Invalid report range');
   if (filters.source && !['auto', 'workbook'].includes(filters.source))
     throw new FinanceError('This report source is not available yet', 503);
   const scope = (await pool.query(`SELECT id,organization_id FROM qarzhy.report_scopes
@@ -134,6 +210,8 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
   const start = `${month}-01`, end = periodEnd(month);
   const available = await availableMonths(pool, scope.id, scope.organization_id, month);
   const pnlSource = filters.source === 'workbook' ? 'historical' : 'auto';
+  if (filters.range === 'ytd') return buildYearToDate({ pool, principal, filters,
+    scope, month, available, source: pnlSource });
   const [pnl, balance, cashflow] = await Promise.all([
     getPnlPeriod({ pool, principal, scopeId: scope.id, start, end,
       source: pnlSource }),
