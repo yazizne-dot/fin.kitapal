@@ -4,6 +4,7 @@ import pg from 'pg';
 import { assertTestDatabaseUrl } from './helpers/test-db.mjs';
 import { withTransaction } from '../../backend/db/connection.mjs';
 import { getCoverage, saveCoverage, verifyOpeningSnapshot } from '../../backend/reports/coverage.mjs';
+import { getCashflowPeriod } from '../../backend/reports/cashflow.mjs';
 
 test('coverage separates historical and live intervals and reports unconfigured gaps', { skip: !process.env.TEST_DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: assertTestDatabaseUrl(process.env.TEST_DATABASE_URL) });
@@ -29,6 +30,22 @@ test('coverage separates historical and live intervals and reports unconfigured 
     assert.deepEqual(complete.gaps, []);
     assert.equal(complete.intervals[0].source_kind, 'historical');
     assert.equal(complete.intervals[1].source_kind, 'events');
+    const importedCash = await withTransaction(pool, client => saveCoverage({ client, principal, input: {
+      datasetId: historical.id, scopeId: scope.id, family: 'cashflow', start: '2026-10-01',
+      end: '2026-11-01', sourceKind: 'movements',
+    } }));
+    assert.equal(importedCash.source_kind, 'movements');
+    assert.equal(String(importedCash.dataset_id), String(historical.id));
+    const importedAccount = (await pool.query(`INSERT INTO qarzhy.cash_accounts(organization_id,code,name,account_type)
+      VALUES($1,'coverage_imported_cash','Imported cash','bank') RETURNING id`, [org.id])).rows[0];
+    const batch = (await pool.query("INSERT INTO qarzhy.import_batches(fingerprint) VALUES('coverage-imported-cash') RETURNING id")).rows[0];
+    await pool.query(`INSERT INTO qarzhy.cash_movements(dataset_id,scope_id,organization_id,cash_account_id,
+      occurred_on,direction,amount,posting_key,import_batch_id,external_key)
+      VALUES($1,$2,$3,$4,'2026-10-15','in',12.34,'coverage-imported-cash',$5,'coverage-cash-1')`,
+    [historical.id, scope.id, org.id, importedAccount.id, batch.id]);
+    const cashflow = await getCashflowPeriod({ pool, principal, scopeId: scope.id,
+      start: '2026-10-01', end: '2026-11-01' });
+    assert.equal(cashflow.totals.net, '12.34');
   } finally { await pool.end(); }
 });
 

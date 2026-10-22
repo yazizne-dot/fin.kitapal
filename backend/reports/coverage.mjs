@@ -52,7 +52,7 @@ export async function saveCoverage({ client, principal, input }) {
   if (input.sourceKind === 'historical' && dataset.kind !== 'imported_finance')
     throw new FinanceError('Historical coverage must use imported finance data');
   const importedCashMovements = input.family === 'cashflow' && input.sourceKind === 'movements' &&
-    dataset.kind === 'legacy_ledger';
+    ['legacy_ledger', 'imported_finance'].includes(dataset.kind);
   if (input.sourceKind !== 'historical' && dataset.kind !== 'live' && !importedCashMovements)
     throw new FinanceError('Movement or event coverage has an incompatible dataset');
   const scope = (await client.query('SELECT organization_id FROM qarzhy.report_scopes WHERE id=$1', [scopeId])).rows[0];
