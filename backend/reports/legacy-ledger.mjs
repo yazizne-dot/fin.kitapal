@@ -92,15 +92,18 @@ async function readLegacyLedgerData({ client, principal, filters }) {
       SELECT 1 FROM qarzhy.financial_events e WHERE e.dataset_id=$2 AND e.organization_id=o.id
         AND e.external_key ~ '^sqlite/operation/[1-9][0-9]*/event$') OR EXISTS (
       SELECT 1 FROM qarzhy.cash_movements c WHERE c.dataset_id=$2 AND c.organization_id=o.id
-        AND c.external_key ~ '^sqlite/operation/[1-9][0-9]*/cash$')) ORDER BY o.name`,
+        AND c.external_key ~ '^sqlite/operation/[1-9][0-9]*/cash$') OR EXISTS (
+      SELECT 1 FROM qarzhy.payment_plans p WHERE p.organization_id=o.id) OR EXISTS (
+      SELECT 1 FROM qarzhy.budget_versions v JOIN qarzhy.report_scopes s ON s.id=v.scope_id
+      WHERE s.organization_id=o.id AND v.name='Legacy ledger budget ' || v.year::text))
+    ORDER BY o.name`,
   [principal.organization_id ?? null, dataset.id])).rows;
   const matches = filters.org ? orgs.filter(row => row.name === filters.org) : [];
   if (matches.length > 1) throw new FinanceError('Ambiguous organization name', 409);
   const selected = matches[0];
   if (filters.org && !selected) throw new AccessError('Organization not available', 403);
   const organizationId = selected?.id ?? principal.organization_id ?? null;
-  const [events, movements, articleKinds] = await Promise.all([
-    client.query(`SELECT e.external_key,to_char(e.occurred_on,'YYYY-MM-DD') date,e.event_kind,
+  const events = await client.query(`SELECT e.external_key,to_char(e.occurred_on,'YYYY-MM-DD') date,e.event_kind,
       e.amount::text amount,e.cost_amount::text cost,e.organization_id,o.name org,
       a.name article,cp.name counterparty,d.number document,to_char(d.due_date,'YYYY-MM-DD') due,
       l.name point FROM qarzhy.financial_events e
@@ -111,8 +114,8 @@ async function readLegacyLedgerData({ client, principal, filters }) {
       LEFT JOIN qarzhy.locations l ON l.id=d.location_id
       WHERE e.dataset_id=$1 AND e.active=true AND ($2::bigint IS NULL OR e.organization_id=$2)
         AND e.external_key LIKE 'sqlite/operation/%/event' ORDER BY e.occurred_on,e.id`,
-    [dataset.id, organizationId]),
-    client.query(`SELECT c.external_key,to_char(c.occurred_on,'YYYY-MM-DD') date,c.direction,
+    [dataset.id, organizationId]);
+  const movements = await client.query(`SELECT c.external_key,to_char(c.occurred_on,'YYYY-MM-DD') date,c.direction,
       c.amount::text amount,c.organization_id,o.name org,c.article_id,a.name article,
       cp.name counterparty,c.note,s.kinds settlement_kinds FROM qarzhy.cash_movements c
       JOIN qarzhy.organizations o ON o.id=c.organization_id
@@ -123,11 +126,10 @@ async function readLegacyLedgerData({ client, principal, filters }) {
         WHERE ds.cash_movement_id=c.id) s ON true
       WHERE c.dataset_id=$1 AND ($2::bigint IS NULL OR c.organization_id=$2)
         AND c.external_key LIKE 'sqlite/operation/%/cash' ORDER BY c.occurred_on,c.id`,
-    [dataset.id, organizationId]),
-    client.query(`SELECT article_id,array_agg(DISTINCT event_kind) kinds FROM qarzhy.financial_events
+    [dataset.id, organizationId]);
+  const articleKinds = await client.query(`SELECT article_id,array_agg(DISTINCT event_kind) kinds FROM qarzhy.financial_events
       WHERE dataset_id=$1 AND event_kind IN ('opex','tax') AND active=true
-        AND external_key LIKE 'sqlite/operation/%/event' GROUP BY article_id`, [dataset.id]),
-  ]);
+        AND external_key LIKE 'sqlite/operation/%/event' GROUP BY article_id`, [dataset.id]);
   const profiles = new Map(articleKinds.rows.map(row => [String(row.article_id), row.kinds]));
   const grouped = new Map();
   for (const event of events.rows) {
@@ -169,6 +171,22 @@ async function readLegacyLedgerData({ client, principal, filters }) {
     JOIN qarzhy.financial_articles a ON a.id=p.article_id
     WHERE ($1::bigint IS NULL OR p.organization_id=$1) AND p.status='planned'
     ORDER BY p.planned_on,p.id`, [organizationId])).rows;
+  const budgetRows = (await client.query(`WITH selected AS (
+      SELECT DISTINCT ON (v.scope_id) v.id,v.scope_id FROM qarzhy.budget_versions v
+      JOIN qarzhy.report_scopes s ON s.id=v.scope_id
+      WHERE s.scope_type='organization' AND v.year=$2 AND v.status='draft'
+        AND v.name='Legacy ledger budget ' || v.year::text
+        AND ($1::bigint IS NULL OR s.organization_id=$1)
+      ORDER BY v.scope_id,v.id DESC
+    ) SELECT to_char(b.month,'YYYY-MM') AS budget_month,o.name org,m.code metric,b.amount::text amount
+      FROM selected v JOIN qarzhy.budget_items b ON b.budget_version_id=v.id
+      JOIN qarzhy.report_metrics m ON m.id=b.metric_id
+      JOIN qarzhy.report_scopes s ON s.id=v.scope_id
+      JOIN qarzhy.organizations o ON o.id=s.organization_id
+      WHERE b.month=$3 AND b.article_id IS NULL AND b.channel_id IS NULL
+        AND m.code IN ('legacy.ledger.revenue','legacy.ledger.cost','legacy.ledger.opex',
+          'legacy.ledger.depreciation','legacy.ledger.tax')
+      ORDER BY m.code,o.name`, [organizationId, Number(month.slice(0, 4)), start])).rows;
   const periods = (await client.query(`SELECT bool_or(closed) closed FROM qarzhy.accounting_periods
     WHERE starts_on=$1 AND ($2::bigint IS NULL OR organization_id=$2)`, [start, organizationId])).rows;
   const audits = principal.organization_id ? [] : (await client.query(`SELECT id,to_char(occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') time,
@@ -179,7 +197,10 @@ async function readLegacyLedgerData({ client, principal, filters }) {
     return { month: value, ...ledger(all.filter(row => row.date.startsWith(value))) };
   });
   return { source: 'ledger', user: userJson(principal), orgs: orgs.map(row => row.name), kinds,
-    month, end, operations: current, allOperations: through, budget: [], report: ledger(current),
+    month, end, operations: current, allOperations: through,
+    budget: budgetRows.map(row => ({ month: row.budget_month, org: row.org,
+      metric: row.metric.slice('legacy.ledger.'.length), amount: safeDisplayMoney(row.amount) })),
+    report: ledger(current),
     opening: ledger(all.filter(row => row.date < start)), balance: ledger(through),
     previous: ledger(all.filter(row => row.date.startsWith(priorYear(month)))), history,
     debts: debts(through, end), plans: planRows.map(row => ({ ...row, id: Number(row.id),

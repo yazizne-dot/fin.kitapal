@@ -8,6 +8,11 @@ function monthStart(value) {
   return dateOnly(value.length === 7 ? `${value}-01` : value);
 }
 
+const LEGACY_BUDGET_METRICS = Object.freeze({
+  revenue: 'Revenue', cost: 'Cost', opex: 'Operating expense',
+  depreciation: 'Depreciation', tax: 'Tax',
+});
+
 export async function savePlan({ client, principal, input }) {
   requirePermission(principal, 'finance.write');
   const organizationId = id(input.organizationId, 'organization ID');
@@ -84,6 +89,60 @@ export async function saveBudgetItem({ client, principal, input }) {
   await audit(client, principal, 'budget_item_save', 'budget_item', row.id,
     { after: { amount, month } });
   return row;
+}
+
+export async function saveLegacyBudget({ client, principal, input }) {
+  requirePermission(principal, 'finance.write');
+  const month = monthStart(input.month);
+  const orgName = typeof input.org === 'string' ? input.org.trim() : '';
+  const metric = input.metric;
+  if (!orgName || orgName.length > 160) throw new FinanceError('Invalid organization');
+  if (typeof metric !== 'string' || !Object.hasOwn(LEGACY_BUDGET_METRICS, metric))
+    throw new FinanceError('Invalid budget metric');
+  if (!Number.isSafeInteger(input.amount) || input.amount < 0)
+    throw new FinanceError('Invalid legacy budget amount');
+  const organizations = (await client.query(`SELECT id FROM qarzhy.organizations
+    WHERE active=true AND name=$1 ORDER BY id LIMIT 2`, [orgName])).rows;
+  if (!organizations.length) throw new FinanceError('Organization not found', 404);
+  if (organizations.length > 1) throw new FinanceError('Ambiguous organization name', 409);
+  const organizationId = organizations[0].id;
+  if (principal.organization_id && String(principal.organization_id) !== String(organizationId))
+    throw new AccessError('Forbidden organization');
+  await assertOpenPeriod(client, organizationId, month);
+
+  await client.query(`INSERT INTO qarzhy.report_scopes(scope_type,organization_id)
+    VALUES('organization',$1) ON CONFLICT (scope_type,organization_id) DO NOTHING`, [organizationId]);
+  const scope = (await client.query(`SELECT id FROM qarzhy.report_scopes
+    WHERE scope_type='organization' AND organization_id=$1`, [organizationId])).rows[0];
+  const year = Number(month.slice(0, 4));
+  const name = `Legacy ledger budget ${year}`;
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`legacy-budget:${scope.id}:${year}`]);
+  const drafts = (await client.query(`SELECT id FROM qarzhy.budget_versions
+    WHERE scope_id=$1 AND year=$2 AND name=$3 AND status='draft' ORDER BY id LIMIT 2 FOR UPDATE`,
+  [scope.id, year, name])).rows;
+  if (drafts.length > 1) throw new FinanceError('Ambiguous legacy budget draft', 409);
+  let versionId = drafts[0]?.id;
+  if (!versionId) {
+    versionId = (await client.query(`INSERT INTO qarzhy.budget_versions(scope_id,year,name,created_by)
+      VALUES($1,$2,$3,$4) RETURNING id`, [scope.id, year, name, principal.id])).rows[0].id;
+    await audit(client, principal, 'legacy_budget_draft_create', 'budget_version', versionId,
+      { after: { organization_id: organizationId, year, name } });
+  }
+  const code = `legacy.ledger.${metric}`;
+  await client.query(`INSERT INTO qarzhy.report_metrics(code,name,unit,calculation_kind)
+    VALUES($1,$2,'amount','input') ON CONFLICT(code) DO NOTHING`,
+  [code, LEGACY_BUDGET_METRICS[metric]]);
+  const metricId = (await client.query('SELECT id FROM qarzhy.report_metrics WHERE code=$1', [code])).rows[0].id;
+  const previous = (await client.query(`SELECT amount::text amount FROM qarzhy.budget_items
+    WHERE budget_version_id=$1 AND month=$2 AND metric_id=$3
+      AND article_id IS NULL AND channel_id IS NULL`, [versionId, month, metricId])).rows[0];
+  const item = await saveBudgetItem({ client, principal, input: {
+    budgetVersionId: versionId, month, metricId, amount: String(input.amount),
+  } });
+  await audit(client, principal, 'legacy_budget_save', 'budget_item', item.id,
+    { before: previous ? { amount: previous.amount } : undefined,
+      after: { amount: String(input.amount), month, organization_id: organizationId, metric } });
+  return item;
 }
 
 export async function setPeriodClosed({ client, principal, organizationId: organizationInput, month, closed, reason }) {
