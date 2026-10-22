@@ -46,6 +46,22 @@ test('finance HTTP routes require a live session and CSRF then post one document
       'content-type': 'application/json', 'x-csrf-token': csrf }, body: JSON.stringify({ id: draft.id, reason: 'Duplicate invoice' }) });
     assert.equal(reversal.status, 200);
     assert.equal((await reversal.json()).document.status, 'reversed');
+    const portalSale = await fetch(`${base}/api/operations`, { method: 'POST', headers: {
+      origin, cookie, 'content-type': 'application/json', 'x-csrf-token': csrf,
+    }, body: JSON.stringify({ source: 'manual', external_id: 'http-sale-portal',
+      date: '2026-11-05', org: 'Finance HTTP Org', point: '', counterparty: 'Finance HTTP Customer',
+      document: 'HTTP-PORTAL-1', kind: 'sale', amount: 100, cost: 20, due: '', article: '' }) });
+    assert.equal(portalSale.status, 201);
+    const portalId = Number((await portalSale.json()).operation.id);
+    const deniedCorrection = await fetch(`${base}/api/correction`, { method: 'POST', headers: {
+      origin, cookie, 'content-type': 'application/json',
+    }, body: JSON.stringify({ id: -portalId, amount: 120, cost: 20, reason: 'Price fix' }) });
+    assert.equal(deniedCorrection.status, 403);
+    const correction = await fetch(`${base}/api/correction`, { method: 'POST', headers: {
+      origin, cookie, 'content-type': 'application/json', 'x-csrf-token': csrf,
+    }, body: JSON.stringify({ id: -portalId, amount: 120, cost: 20, reason: 'Price fix' }) });
+    assert.equal(correction.status, 200);
+    assert.equal((await correction.json()).operation.amount, '120.00');
     const legacyPlan = { date: '2026-11-12', org: 'Finance HTTP Org',
       article: 'New finance HTTP article', direction: 'out', amount: 75 };
     const deniedPlan = await fetch(`${base}/api/plans`, { method: 'POST', headers: {

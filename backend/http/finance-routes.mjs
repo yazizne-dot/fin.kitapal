@@ -6,6 +6,7 @@ import { sendJson } from './response.mjs';
 import { withTransaction } from '../db/connection.mjs';
 import { createDocument, postDocument, reverseDocument, listOperations } from '../finance/documents.mjs';
 import { createPortalOperation } from '../finance/portal-operations.mjs';
+import { correctPortalOperation } from '../finance/portal-correction.mjs';
 import { importPortalOperations } from '../finance/portal-import.mjs';
 import { recordMovement, settleDocument, listMovements } from '../finance/movements.mjs';
 import { createExpense, reviewExpense, listExpenses, listExpenseCategories, updateExpense, deleteExpense } from '../finance/expenses.mjs';
@@ -35,6 +36,8 @@ export function registerFinanceRoutes(router, { pool, publicOrigin, csrfSecret }
     ({ document: await createDocument({ client, principal, input }) }), 201);
   route('POST', '/api/operations', 'finance.write', async ({ client, principal, input }) =>
     ({ ok: true, operation: await createPortalOperation({ client, principal, input }) }), 201);
+  route('POST', '/api/correction', 'finance.write', async ({ client, principal, input }) =>
+    ({ ok: true, operation: await correctPortalOperation({ client, principal, input }) }));
   router.add('POST', '/api/import', async ({ request, response, requestId }) => {
     const principal = await mutation(request, 'finance.write');
     const input = await readJson(request, 4_194_304);
