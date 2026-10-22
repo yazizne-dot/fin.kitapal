@@ -121,6 +121,30 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
         await page.locator('.content').waitFor();
         assert.doesNotMatch(await page.locator('.content').innerText(), /\bNaN\b|\bundefined\b/);
       }
+      const revenueMetric = (await pool.query("SELECT id FROM qarzhy.report_metrics WHERE code='live.pnl.revenue'")).rows[0];
+      await page.locator('[data-page="financial-editor"]').first().click();
+      await page.waitForURL(url => url.pathname === '/financial-editor');
+      await page.locator('#editor-book').selectOption(`pnl-live-${scope.id}`);
+      await page.locator(`[data-admin="edit-cell"][data-cell="${revenueMetric.id}:0:0"]`).click();
+      await page.locator('#finance-cell-form [name="value"]').fill('120');
+      await page.locator('#finance-cell-form [name="reason"]').fill('Browser report correction');
+      await page.locator('#finance-cell-form button[type="submit"]').click();
+      await page.locator('#finance-cell-form').waitFor({ state: 'hidden' });
+      const corrected = await page.request.get(`${origin}/api/data?month=2026-08`);
+      assert.equal(corrected.status(), 200);
+      assert.equal((await corrected.json()).report.profit, 80);
+      await page.locator('[data-page="pnl"]').first().click();
+      await page.waitForURL(url => url.pathname === '/pnl');
+      const profitRow = page.locator('.wb-pnl tr.total').filter({ has: page.locator('[data-wb-drill="profit"]') });
+      assert.match(await profitRow.innerText(), /80/);
+      const events = await pool.query("SELECT event_kind,amount::text FROM qarzhy.financial_events ORDER BY event_kind");
+      assert.deepEqual(events.rows, [
+        { event_kind: 'cost', amount: '40' },
+        { event_kind: 'revenue', amount: '100' },
+      ]);
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.documents')).rows[0].n, 0);
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.cash_movements')).rows[0].n, 0);
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM qarzhy.report_override_history')).rows[0].n, 1);
       assert.deepEqual(errors, []);
       assert.equal(existsSync(sqlitePath), false);
       await context.close();
