@@ -3,7 +3,9 @@ import { promisify } from 'node:util';
 
 const scrypt = promisify(scryptCallback);
 const DAY_MS = 24 * 60 * 60 * 1000;
-const COMMON = new Set(['passwordpassword', 'password123456', '123456789012345', 'qwerty123456789', 'adminadminadmin', 'letmeinletmein', 'changemechangeme']);
+const COMMON = new Set(['password', '12345678', 'qwerty12', 'admin123',
+  'passwordpassword', 'password123456', '123456789012345', 'qwerty123456789',
+  'adminadminadmin', 'letmeinletmein', 'changemechangeme']);
 
 export async function verifyPassword(password, user) {
   if (typeof password !== 'string' || !/^[0-9a-f]{32}$/.test(user?.password_salt ?? '') || !/^[0-9a-f]{128}$/.test(user?.password_hash ?? '')) return false;
@@ -19,10 +21,10 @@ export async function hashPassword(password) {
 }
 
 export function validateNewPassword(password) {
-  if (typeof password !== 'string' || [...password].length < 15) throw new Error('Password must have at least 15 characters');
+  if (typeof password !== 'string' || [...password].length < 8) throw new Error('Password must have at least 8 characters');
   if ([...password].length > 1024) throw new Error('Password is too long');
   const normalized = password.normalize('NFKC').trim().toLowerCase().replace(/\s/g, '');
-  if (COMMON.has(normalized) || /^(.)\1{14,}$/.test(normalized)) throw new Error('Common or weak password');
+  if (COMMON.has(normalized) || /^(.)\1{7,}$/.test(normalized)) throw new Error('Common or weak password');
 }
 
 export function passwordChangeDue(user, now = new Date()) {

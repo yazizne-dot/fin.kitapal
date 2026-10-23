@@ -188,6 +188,22 @@ test("employee management access and required-password UI remain separate", () =
   assert.ok(forced.includes("password-form"));
   assert.ok(!forced.includes("add-expense"));
 });
+test("password change form accepts an eight-character new password", () => {
+  const html = render(
+    <ManagementView
+      page="account"
+      user={{ ...user, must_change_password: 1 }}
+      api={api}
+      refresh={actions.refresh}
+      onLogout={actions.refresh}
+    />,
+  );
+  for (const name of ["new_password", "confirmation"]) {
+    const field = html.match(new RegExp(`<input[^>]*name="${name}"[^>]*>`))?.[0];
+    assert.ok(field, name);
+    assert.match(field, /minLength="8"/);
+  }
+});
 test("React login has secure password and remember controls, translations preserve source strings", () => {
   const html = render(<LoginForm onSuccess={() => {}} />);
   assert.ok(html.includes('type="password"'));

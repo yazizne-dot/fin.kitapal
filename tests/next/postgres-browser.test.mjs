@@ -269,7 +269,7 @@ test('Next login and report navigation use the PostgreSQL Node API without openi
         assert.ok(previousCookie?.httpOnly);
         assert.equal((await adminPage.request.get(`${origin}/api/data?month=2026-08`)).status(), 403);
         assert.equal((await adminPage.request.get(`${origin}/api/users`)).status(), 403);
-        const rotatedPassword = 'browser admin rotated password 2026';
+        const rotatedPassword = 'B7x!2qR9';
         await adminPage.locator('#password-form [name="current_password"]').fill(adminPassword);
         await adminPage.locator('#password-form [name="new_password"]').fill(rotatedPassword);
         await adminPage.locator('#password-form [name="confirmation"]').fill(rotatedPassword);

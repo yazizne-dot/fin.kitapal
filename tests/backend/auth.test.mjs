@@ -16,8 +16,11 @@ test('imported scrypt hashes remain valid and new hashes use the same format', a
   assert.equal(await verifyPassword('a sufficiently long passphrase', fresh), true);
 });
 
-test('password policy accepts long passphrases and rejects weak values', () => {
-  assert.throws(() => validateNewPassword('short'), /15/);
+test('password policy accepts eight characters and rejects shorter or weak values', () => {
+  assert.throws(() => validateNewPassword('Seven7!'), /8/);
+  assert.doesNotThrow(() => validateNewPassword('R7p!2sQ9'));
+  assert.throws(() => validateNewPassword('password'), /common|weak/i);
+  assert.throws(() => validateNewPassword('12345678'), /common|weak/i);
   assert.throws(() => validateNewPassword('passwordpassword'), /common|weak/i);
   assert.doesNotThrow(() => validateNewPassword('my long private phrase 2026'));
 });

@@ -157,7 +157,7 @@ export function AccountView({ user, api, refresh }: ManagementProps) {
                     name="new_password"
                     type="password"
                     required
-                    minLength={15}
+                    minLength={8}
                     maxLength={128}
                     autoComplete="new-password"
                   />
@@ -168,7 +168,7 @@ export function AccountView({ user, api, refresh }: ManagementProps) {
                     name="confirmation"
                     type="password"
                     required
-                    minLength={15}
+                    minLength={8}
                     maxLength={128}
                     autoComplete="new-password"
                   />

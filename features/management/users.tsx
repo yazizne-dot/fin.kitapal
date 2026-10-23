@@ -165,11 +165,11 @@ export function UsersView({ user, api, refresh }: ManagementProps) {
                   <input
                     name="password"
                     type="password"
-                    minLength={15}
+                    minLength={8}
                     maxLength={1024}
                     required
                     autoComplete="new-password"
-                    placeholder="Кемінде 15 таңба"
+                    placeholder="Кемінде 8 таңба"
                     style={{ width: "100%" }}
                   />
                 </label>
@@ -231,11 +231,11 @@ export function UsersView({ user, api, refresh }: ManagementProps) {
                     <input
                       name="password"
                       type="password"
-                      minLength={15}
+                      minLength={8}
                       maxLength={1024}
                       required
                       autoComplete="new-password"
-                      placeholder="Кемінде 15 таңба"
+                      placeholder="Кемінде 8 таңба"
                     />
                   </label>
                 )}
