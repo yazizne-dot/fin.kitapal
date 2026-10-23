@@ -4,7 +4,8 @@ import pg from 'pg';
 import { parsePreflightSettings } from '../backend/db/preflight-config.mjs';
 
 const mode = process.argv[2];
-if (!['--check', '--apply'].includes(mode)) throw new Error('Use --check or --apply');
+if (!['--check', '--apply', '--repair-session-grant'].includes(mode))
+  throw new Error('Use --check, --apply, or --repair-session-grant');
 const config = parsePreflightSettings(await readFile(new URL('../.env.pg-preflight.local', import.meta.url), 'utf8'));
 if (config.database !== 'fin' || config.host !== '127.0.0.1' || config.port !== 5436)
   throw new Error('Unexpected PostgreSQL target');
@@ -16,7 +17,7 @@ const INSERT = ['login_attempts', 'sessions', 'audit_log', 'users', 'report_over
   'report_scopes', 'budget_versions', 'report_metrics', 'accounting_periods',
   'employee_expenses', 'expense_reviews', 'cash_movements', 'document_settlements',
   'counterparties', 'locations', 'portal_operations'];
-const UPDATE = ['login_attempts', 'users', 'report_overrides', 'financial_state',
+const UPDATE = ['login_attempts', 'sessions', 'users', 'report_overrides', 'financial_state',
   'balance_snapshots', 'documents', 'employee_expenses', 'budget_items',
   'accounting_periods'];
 const DELETE = ['sessions', 'login_attempts', 'report_overrides'];
@@ -30,7 +31,15 @@ try {
   const existing = (await client.query('SELECT rolsuper,rolcanlogin FROM pg_roles WHERE rolname=$1', [role])).rows[0];
   if (mode === '--check') {
     console.info(JSON.stringify({ database: target.db, applicationRole: role,
-      present: Boolean(existing), superuser: existing?.rolsuper ?? null }));
+      present: Boolean(existing), superuser: existing?.rolsuper ?? null,
+      sessionsUpdate: existing ? (await client.query(
+        "SELECT has_table_privilege($1, 'qarzhy.sessions', 'UPDATE') AS allowed", [role])).rows[0].allowed : null }));
+  } else if (mode === '--repair-session-grant') {
+    if (!existing || existing.rolsuper || !existing.rolcanlogin)
+      throw new Error('Expected an existing non-superuser application role');
+    await client.query('GRANT UPDATE ON TABLE qarzhy.sessions TO qarzhy_app');
+    console.info(JSON.stringify({ database: target.db, applicationRole: role,
+      sessionsUpdate: true }));
   } else {
     if (existing) throw new Error('Application role already exists; refusing to rotate its password');
     const password = randomBytes(32).toString('hex');
