@@ -50,20 +50,18 @@ button.primary{background:var(--brand);border-color:var(--brand)}button.primary:
 .nav a{display:flex;align-items:center;gap:11px;width:100%;padding:11px 13px;border-radius:8px;color:inherit;text-decoration:none;font-size:12px;font-weight:500}.nav a:hover{background:rgba(164,36,122,.06)}.nav a.active{background:#f2e8ef;color:#8e246d}.user{text-decoration:none;color:inherit}.brand{text-decoration:none}
 
 /* Login screen */
-.login-layout{grid-template-columns:minmax(0,58%) minmax(0,42%);min-height:100vh;min-height:100dvh;background:linear-gradient(103deg,#32091f 0%,#8d5270 57%,#e6ccd8 100%)}
-.login-art{isolation:isolate;display:block;position:relative;padding:0;background:none;color:#fff}
-.login-art::before{content:"";position:absolute;inset:0;z-index:-2;background:url('/login-library.png') center 60%/cover no-repeat;filter:contrast(.72) saturate(.76) brightness(.76);opacity:.56;mask-image:linear-gradient(90deg,#000 0%,#000 48%,transparent 100%)}
-.login-art::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(50,9,31,.46),rgba(50,9,31,.2) 60%,transparent 100%);pointer-events:none}
+.login-layout{position:relative;isolation:isolate;grid-template-columns:minmax(0,1fr) 420px minmax(0,1fr);min-height:100vh;min-height:100dvh;overflow:hidden;background:linear-gradient(103deg,#32091f 0%,#8d5270 55%,#e6ccd8 100%)}
+.login-decoration{position:absolute;inset:0 0 0 auto;z-index:0;width:min(66vw,880px);background:url('/login-library.png') center 60%/cover no-repeat;filter:contrast(.72) saturate(.78) brightness(.83);opacity:.35;mask-image:linear-gradient(90deg,transparent 0%,transparent 24%,#000 64%,#000 100%);pointer-events:none}
+.login-art{grid-column:1;position:relative;z-index:1;display:block;padding:0;background:none;color:#fff}
 .login-art-content{position:relative;min-height:100%;padding:48px clamp(38px,4.5vw,86px) 54px}
 .login-brand{display:flex;flex-direction:column;align-items:flex-start;gap:14px}
 .login-logo{display:inline-flex;align-items:center;justify-content:center;min-height:69px;padding:9px 12px;border-radius:11px;background:rgba(247,237,242,.92);box-shadow:0 10px 28px rgba(31,5,21,.12)}
 .login-brand .login-logo img{display:block;width:155px;max-width:100%;height:auto;filter:none;mix-blend-mode:normal}
-.login-brand p{margin:0;max-width:370px;color:#f6eaf0;font-size:13px;font-style:italic;letter-spacing:.1px;line-height:1.5}
-.login-art-grid{margin-top:clamp(55px,9vh,92px)}
+.login-art-grid{margin-top:clamp(80px,13vh,130px)}
 .login-art .login-hero-copy h1{max-width:610px;margin:0;color:#fff;font-size:clamp(31px,2.5vw,46px);font-weight:690;line-height:1.13;letter-spacing:-1.25px;text-wrap:balance}
-.login-art .login-hero-copy p{max-width:440px;margin:24px 0 0;color:#f6e8ee;font-size:15px;line-height:1.7}
-.login-form{position:relative;display:grid;place-items:center;min-width:0;min-height:100vh;min-height:100dvh;padding:80px 26px;background:transparent}
-.login-language{position:absolute;top:32px;right:clamp(26px,4vw,72px);display:flex;align-items:center;gap:9px;height:42px;padding:0 13px;border:0;border-radius:22px;background:rgba(247,237,242,.58);box-shadow:none;color:#8f236d}
+.login-art .login-hero-copy p{max-width:370px;margin:24px 0 0;color:#f6e8ee;font-size:15px;line-height:1.7}
+.login-form{grid-column:2;position:relative;z-index:2;display:grid;place-items:center;min-width:0;min-height:100vh;min-height:100dvh;padding:80px 0;background:transparent}
+.login-language{position:absolute;z-index:3;top:32px;right:clamp(26px,4vw,72px);display:flex;align-items:center;gap:9px;height:42px;padding:0 13px;border:0;border-radius:22px;background:rgba(247,237,242,.58);box-shadow:none;color:#8f236d}
 .login-language .language-select{appearance:none;width:auto;min-width:78px;margin:0;padding:0;border:0;background:transparent;color:#43192f;font-size:13px;font-weight:600;cursor:pointer;outline-offset:5px}
 .login-box{width:min(420px,100%);padding:40px 37px 43px;border:1px solid rgba(255,255,255,.35);border-radius:20px;background:rgba(247,237,242,.88);box-shadow:0 22px 55px rgba(46,10,30,.16);backdrop-filter:blur(8px)}
 .login-box .eyebrow{margin:0 0 15px;color:#8b4b6e;font-size:11px;font-weight:650;letter-spacing:2.8px}
@@ -84,6 +82,6 @@ button.primary{background:var(--brand);border-color:var(--brand)}button.primary:
 .login-box .login-submit:hover{background:#881761}
 .login-box .login-submit svg{margin-left:4px}
 .mobile-company-brand{display:none}
-@media(max-width:900px){.login-layout{grid-template-columns:minmax(0,40%) minmax(0,60%)}.login-art-content{padding:40px 24px}.login-logo{min-height:55px;padding:7px 9px}.login-brand .login-logo img{width:120px}.login-brand p{font-size:11px}.login-art-grid{margin-top:65px}.login-art .login-hero-copy h1{font-size:clamp(27px,3.6vw,34px);letter-spacing:-.7px}.login-art .login-hero-copy p{font-size:13px}.login-form{padding:80px 20px}.login-box{width:min(410px,100%);padding:34px 27px 37px}.login-language{right:22px}}
-@media(max-width:699px){.login-layout{grid-template-columns:1fr;background:linear-gradient(145deg,#8d5270 0%,#e6ccd8 70%,#e6ccd8 100%)}.login-art{display:none}.login-form{min-height:100vh;min-height:100dvh;padding:80px 18px}.login-box{width:min(420px,100%)}.mobile-company-brand{display:block;margin-bottom:24px}.mobile-company-brand img{width:150px;filter:none}.mobile-company-brand .brand-mission{margin:7px 0 0;color:#654257;font-size:12px}.login-language{top:24px;right:20px}}
+@media(max-width:900px){.login-layout{grid-template-columns:minmax(0,40%) minmax(0,60%)}.login-decoration{width:55vw;opacity:.18}.login-art-content{padding:40px 24px}.login-logo{min-height:55px;padding:7px 9px}.login-brand .login-logo img{width:120px}.login-art-grid{margin-top:85px}.login-art .login-hero-copy h1{font-size:clamp(27px,3.6vw,34px);letter-spacing:-.7px}.login-art .login-hero-copy p{font-size:13px}.login-form{padding:80px 20px}.login-box{width:min(410px,100%);padding:34px 27px 37px}.login-language{right:22px}}
+@media(max-width:699px){.login-layout{grid-template-columns:1fr;background:linear-gradient(145deg,#8d5270 0%,#e6ccd8 70%,#e6ccd8 100%)}.login-decoration,.login-art{display:none}.login-form{grid-column:1;min-height:100vh;min-height:100dvh;padding:80px 18px}.login-box{width:min(420px,100%)}.mobile-company-brand{display:block;margin-bottom:24px}.mobile-company-brand img{width:150px;filter:none}.login-language{top:24px;right:20px}}
 @media(max-width:560px){.login-form{padding:80px 16px}.login-language{top:20px;right:16px}.login-box{padding:29px 24px 33px}.login-box h2{font-size:31px}.login-box .login-description{margin-bottom:23px}.login-box .login-field{margin-top:19px}}

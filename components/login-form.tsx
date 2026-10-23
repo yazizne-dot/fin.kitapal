@@ -6,9 +6,8 @@ import { Icon } from "./ui/icon";
 
 const copy = {
   kk: {
-    mission: "Қазақстандағы кітап оқитын елге айналдырамыз",
     hero: "Кітап бизнесінің қаржысын басқару платформасы",
-    intro: "Баспа, кітап дүкендері және дистрибуцияның барлық қаржысын — бір жүйеде. Түсім, шығыс, қор, талдау және есептер.",
+    intro: "Баспа, кітап дүкендері және дистрибуция қаржысы бір жүйеде.",
     welcome: "ҚОШ КЕЛДІҢІЗ",
     title: "Жүйеге кіру",
     description: "Жұмыс кеңістігіңізге кіру үшін логиніңіз бен құпиясөзіңізді енгізіңіз.",
@@ -23,9 +22,8 @@ const copy = {
     language: "Тіл",
   },
   ru: {
-    mission: "Сделаем Казахстан читающей страной",
     hero: "Платформа управления финансами книжного бизнеса",
-    intro: "Финансы издательства, книжных магазинов и дистрибуции — в одной системе. Доходы, расходы, остатки, аналитика и отчёты.",
+    intro: "Финансы издательства, магазинов и дистрибуции в одной системе.",
     welcome: "ДОБРО ПОЖАЛОВАТЬ",
     title: "Вход в систему",
     description: "Введите логин и пароль, чтобы войти в рабочее пространство.",
@@ -86,11 +84,11 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="login-layout">
+      <div className="login-decoration" aria-hidden="true" />
       <section className="login-art" aria-label="Kitapal">
         <div className="login-art-content">
           <div className="login-brand">
             <span className="login-logo"><img src="/kitapal-logo.png" alt="Kitapal" width="1880" height="701" /></span>
-            <p>{words.mission}</p>
           </div>
           <div className="login-art-grid">
             <div className="login-hero-copy">
@@ -100,9 +98,7 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           </div>
         </div>
       </section>
-
-      <section className="login-form">
-        <div className="login-language">
+      <div className="login-language">
           <Icon name="globe" size={22} />
           <select
             id="auth-language"
@@ -115,11 +111,11 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
             <option value="ru">Русский</option>
           </select>
           <Icon name="down" size={17} />
-        </div>
+      </div>
+      <section className="login-form">
         <form className="login-box" id="login-form" onSubmit={submit} aria-busy={busy}>
           <div className="mobile-company-brand">
             <img src="/kitapal-logo.png" alt="Kitapal" width="1880" height="701" />
-            <p className="brand-mission">{words.mission}</p>
           </div>
           <div className="eyebrow">{words.welcome}</div>
           <h2>{words.title}</h2>
