@@ -30,6 +30,9 @@ const paths: Record<string, string> = {
   file: "M5 2h9l5 5v15H5z M14 2v6h5 M8 12h8 M8 16h8",
   spark: "M12 3l2 6 7 3-7 3-2 6-2-6-7-3 7-3z",
   lock: "M5 10h14v11H5z M8 10V6a4 4 0 0 1 8 0v4",
+  globe: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M2 12h20 M12 2c-3 3-4 6-4 10s1 7 4 10 M12 2c3 3 4 6 4 10s-1 7-4 10",
+  eye: "M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  "eye-off": "M3 3l18 18 M10 6.2A12 12 0 0 1 12 6c6.4 0 10 6 10 6a15 15 0 0 1-3.1 3.6 M6.2 7.7C3.5 9.4 2 12 2 12s3.6 6 10 6c1.4 0 2.7-.3 3.8-.8 M9.9 9.9a3 3 0 0 0 4.2 4.2",
   refresh: "M20 7V2 M20 7h-5 M20 7A9 9 0 1 0 21 15",
 };
 export function Icon({ name, size = 17 }: { name: string; size?: number }) {

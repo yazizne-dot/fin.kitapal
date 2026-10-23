@@ -2,29 +2,67 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useI18n } from "../features/i18n/provider";
+import { Icon } from "./ui/icon";
+
+const copy = {
+  kk: {
+    mission: "Қазақстандағы кітап оқитын елге айналдырамыз",
+    hero: "Кітап бизнесінің қаржысын басқару платформасы",
+    intro: "Баспа, кітап дүкендері және дистрибуцияның барлық қаржысын — бір жүйеде. Түсім, шығыс, қор, талдау және есептер.",
+    features: [
+      ["Сату және түсім", "Бір жерде бақылаңыз", "chart"],
+      ["Қор және қалдық", "Нақты мәліметтер", "balance"],
+      ["Есептер мен талдау", "Дұрыс шешім қабылдаңыз", "chart"],
+      ["Жеткілісте жұмыс", "Дүкендер мен қоймалар", "file"],
+    ],
+    welcome: "ҚОШ КЕЛДІҢІЗ",
+    title: "Жүйеге кіру",
+    description: "Жұмыс кеңістігіңізге кіру үшін логиніңіз бен құпиясөзіңізді енгізіңіз.",
+    username: "Логин",
+    password: "Құпиясөз",
+    show: "Құпиясөзді көрсету",
+    hide: "Құпиясөзді жасыру",
+    remember: "Мені есте сақтау (30 күн)",
+    submit: "Жұмыс кеңістігіне кіру",
+    loading: "Жүктелуде…",
+    unavailable: "Кіру мүмкін болмады",
+    language: "Тіл",
+  },
+  ru: {
+    mission: "Сделаем Казахстан читающей страной",
+    hero: "Платформа управления финансами книжного бизнеса",
+    intro: "Финансы издательства, книжных магазинов и дистрибуции — в одной системе. Доходы, расходы, остатки, аналитика и отчёты.",
+    features: [
+      ["Продажи и доходы", "Всё под контролем", "chart"],
+      ["Запасы и остатки", "Точные данные", "balance"],
+      ["Отчёты и анализ", "Решения на основе данных", "chart"],
+      ["Работа с поставками", "Магазины и склады", "file"],
+    ],
+    welcome: "ДОБРО ПОЖАЛОВАТЬ",
+    title: "Вход в систему",
+    description: "Введите логин и пароль, чтобы войти в рабочее пространство.",
+    username: "Логин",
+    password: "Пароль",
+    show: "Показать пароль",
+    hide: "Скрыть пароль",
+    remember: "Запомнить меня (30 дней)",
+    submit: "Войти в рабочее пространство",
+    loading: "Загрузка…",
+    unavailable: "Не удалось войти",
+    language: "Язык",
+  },
+};
 
 export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
-  const { language, setLanguage, t: text } = useI18n();
+  const { language, setLanguage, t } = useI18n();
+  const words = copy[language];
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pending = useRef<AbortController | null>(null);
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("qarzhy-language") === "ru") setLanguage("ru");
-    } catch {}
-    return () => pending.current?.abort();
-  }, []);
-  useEffect(() => {
-    document.documentElement.lang = language;
-  }, [language]);
-  function changeLanguage(value: string) {
-    const next = value === "ru" ? "ru" : "kk";
-    setLanguage(next);
-    try {
-      localStorage.setItem("qarzhy-language", next);
-    } catch {}
-  }
+
+  useEffect(() => () => pending.current?.abort(), []);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending.current) return;
@@ -45,13 +83,11 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Кіру мүмкін болмады");
+      if (!response.ok) throw new Error(data.error || words.unavailable);
       if (!controller.signal.aborted) onSuccess();
     } catch (cause) {
       if (!controller.signal.aborted)
-        setError(
-          cause instanceof Error ? cause.message : "Кіру мүмкін болмады",
-        );
+        setError(cause instanceof Error ? cause.message : words.unavailable);
     } finally {
       if (!controller.signal.aborted) {
         setBusy(false);
@@ -59,81 +95,65 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       }
     }
   }
+
   return (
     <div className="login-layout">
-      <div className="login-art">
-        <div className="brand company-brand login-brand">
-          <img
-            src="/kitapal-logo.png"
-            alt="Kitapal"
-            width="1880"
-            height="701"
-          />
-          <div className="brand-mission">
-            {text("Қазақстанды кітап оқитын елге айналдырамыз")}
+      <section className="login-art" aria-label="Kitapal">
+        <div className="login-art-content">
+          <div className="login-brand">
+            <div className="login-wordmark" role="img" aria-label="Kitapal"><span>Kitap</span><b>al</b></div>
+            <p>{words.mission}</p>
+          </div>
+          <div className="login-art-grid">
+            <div className="login-hero-copy">
+              <h1>{words.hero}</h1>
+              <p>{words.intro}</p>
+            </div>
+            <ul className="login-features">
+              {words.features.map(([title, detail, icon]) => (
+                <li key={title}>
+                  <span className="login-feature-icon"><Icon name={icon} size={26} /></span>
+                  <span><strong>{title}</strong><small>{detail}</small></span>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
-        <div>
-          <h1>{text("Қаржыңыз айқын. Шешіміңіз нық.")}</h1>
-          <p>
-            {text(
-              "Баспа, кітап дүкендері және дистрибуция. Компанияңыздың бүкіл қаржысы бір кеңістікте.",
-            )}
-          </p>
-          <div className="mock-bars">
-            {[45, 68, 61, 89, 77, 110, 100, 135, 160].map((height, index) => (
-              <i key={index} style={{ height }} />
-            ))}
-          </div>
-        </div>
-        <p>Kitapal · {text("Қаржылық басқару платформасы")}</p>
-      </div>
-      <div className="login-form">
-        <form
-          className="login-box"
-          id="login-form"
-          onSubmit={submit}
-          aria-busy={busy}
-        >
-          <div className="mobile-company-brand">
-            <img
-              src="/kitapal-logo.png"
-              alt="Kitapal"
-              width="1880"
-              height="701"
-            />
-            <p className="brand-mission">
-              {text("Қазақстанды кітап оқитын елге айналдырамыз")}
-            </p>
-          </div>
-          <div className="eyebrow">{text("ҚОШ КЕЛДІҢІЗ")}</div>
-          <h2>{text("Қаржыңызға көз салыңыз")}</h2>
-          <p>
-            {text("Жұмыс кеңістігіңізге кіру үшін")}
-            <br />
-            {text("логиніңіз бен құпиясөзіңізді енгізіңіз.")}
-          </p>
+      </section>
+
+      <section className="login-form">
+        <div className="login-language">
+          <Icon name="globe" size={22} />
           <select
             id="auth-language"
             className="language-select"
-            aria-label={text("Тіл")}
+            aria-label={words.language}
             value={language}
-            onChange={(e) => changeLanguage(e.target.value)}
+            onChange={(event) => setLanguage(event.target.value === "ru" ? "ru" : "kk")}
           >
             <option value="kk">Қазақша</option>
             <option value="ru">Русский</option>
           </select>
-          <label>
-            {text("Логин")}
-            <input
-              name="username"
-              autoComplete="username"
-              required
-              disabled={busy}
-            />
-          </label>
-          <label>
-            {text("Құпиясөз")}
+          <Icon name="down" size={17} />
+        </div>
+        <form className="login-box" id="login-form" onSubmit={submit} aria-busy={busy}>
+          <div className="mobile-company-brand">
+            <img src="/kitapal-logo.png" alt="Kitapal" width="1880" height="701" />
+            <p className="brand-mission">{words.mission}</p>
+          </div>
+          <div className="eyebrow">{words.welcome}</div>
+          <h2>{words.title}</h2>
+          <p className="login-description">{words.description}</p>
+
+          <label className="login-field" htmlFor="login-username">{words.username}</label>
+          <div className="login-input-wrap">
+            <Icon name="users" size={22} />
+            <input id="login-username" name="username" autoComplete="username" required disabled={busy} />
+          </div>
+
+          <label className="login-field" htmlFor="login-password">{words.password}</label>
+          <div className="login-input-wrap">
+            <Icon name="lock" size={21} />
             <input
               id="login-password"
               name="password"
@@ -142,34 +162,42 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
               required
               disabled={busy}
             />
-          </label>
+            <button
+              className="login-password-toggle"
+              type="button"
+              aria-label={visible ? words.hide : words.show}
+              aria-controls="login-password"
+              aria-pressed={visible}
+              onClick={() => setVisible((current) => !current)}
+            >
+              <Icon name={visible ? "eye-off" : "eye"} size={22} />
+            </button>
+          </div>
+
           <div className="login-options">
             <label className="checkbox-label">
               <input
                 id="show-login-password"
                 type="checkbox"
                 checked={visible}
-                onChange={(e) => setVisible(e.target.checked)}
+                onChange={(event) => setVisible(event.target.checked)}
                 aria-controls="login-password"
-              />{" "}
-              {text("Құпиясөзді көрсету")}
+              />
+              {words.show}
             </label>
             <label className="checkbox-label">
-              <input name="remember" type="checkbox" disabled={busy} />{" "}
-              {text("Мені есте сақтау (30 күн)")}
+              <input name="remember" type="checkbox" disabled={busy} />
+              {words.remember}
             </label>
           </div>
           <div id="login-error" role="alert">
-            {error && <div className="error-message">{text(error)}</div>}
+            {error && <div className="error-message">{t(error)}</div>}
           </div>
-          <button className="primary" type="submit" disabled={busy}>
-            {busy ? text("Жүктелуде…") : text("Жұмыс кеңістігіне кіру")}
+          <button className="primary login-submit" type="submit" disabled={busy}>
+            {busy ? words.loading : words.submit}<Icon name="arrow" size={21} />
           </button>
-          <div className="login-demo">
-            {text("Жеке логиніңіз бен құпиясөзіңізді енгізіңіз.")}
-          </div>
         </form>
-      </div>
+      </section>
     </div>
   );
 }
