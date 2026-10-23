@@ -9,12 +9,6 @@ const copy = {
     mission: "Қазақстандағы кітап оқитын елге айналдырамыз",
     hero: "Кітап бизнесінің қаржысын басқару платформасы",
     intro: "Баспа, кітап дүкендері және дистрибуцияның барлық қаржысын — бір жүйеде. Түсім, шығыс, қор, талдау және есептер.",
-    features: [
-      ["Сату және түсім", "Бір жерде бақылаңыз", "chart"],
-      ["Қор және қалдық", "Нақты мәліметтер", "balance"],
-      ["Есептер мен талдау", "Дұрыс шешім қабылдаңыз", "chart"],
-      ["Жеткілісте жұмыс", "Дүкендер мен қоймалар", "file"],
-    ],
     welcome: "ҚОШ КЕЛДІҢІЗ",
     title: "Жүйеге кіру",
     description: "Жұмыс кеңістігіңізге кіру үшін логиніңіз бен құпиясөзіңізді енгізіңіз.",
@@ -32,12 +26,6 @@ const copy = {
     mission: "Сделаем Казахстан читающей страной",
     hero: "Платформа управления финансами книжного бизнеса",
     intro: "Финансы издательства, книжных магазинов и дистрибуции — в одной системе. Доходы, расходы, остатки, аналитика и отчёты.",
-    features: [
-      ["Продажи и доходы", "Всё под контролем", "chart"],
-      ["Запасы и остатки", "Точные данные", "balance"],
-      ["Отчёты и анализ", "Решения на основе данных", "chart"],
-      ["Работа с поставками", "Магазины и склады", "file"],
-    ],
     welcome: "ДОБРО ПОЖАЛОВАТЬ",
     title: "Вход в систему",
     description: "Введите логин и пароль, чтобы войти в рабочее пространство.",
@@ -101,7 +89,7 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       <section className="login-art" aria-label="Kitapal">
         <div className="login-art-content">
           <div className="login-brand">
-            <div className="login-wordmark" role="img" aria-label="Kitapal"><span>Kitap</span><b>al</b></div>
+            <span className="login-logo"><img src="/kitapal-logo.png" alt="Kitapal" width="1880" height="701" /></span>
             <p>{words.mission}</p>
           </div>
           <div className="login-art-grid">
@@ -109,14 +97,6 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
               <h1>{words.hero}</h1>
               <p>{words.intro}</p>
             </div>
-            <ul className="login-features">
-              {words.features.map(([title, detail, icon]) => (
-                <li key={title}>
-                  <span className="login-feature-icon"><Icon name={icon} size={26} /></span>
-                  <span><strong>{title}</strong><small>{detail}</small></span>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
       </section>
