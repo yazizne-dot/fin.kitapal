@@ -28,6 +28,7 @@ import {
   OrgTable,
 } from "./widgets";
 import { downloadTemplate, LedgerDialog, type DialogState } from "./forms";
+import { pageTitles } from "../portal/routes";
 
 export function LedgerView({
   data,
@@ -984,9 +985,12 @@ export function LedgerView({
     <div className="ledger-layout">
       <div
         className="toolbar"
-        style={{ padding: "0 0 18px", justifyContent: "space-between" }}
+        style={{ padding: "0 0 24px", justifyContent: "space-between" }}
       >
-        <p className="subtitle">{t(subtitles[page] || "")}</p>
+        <div>
+          <h1>{t(pageTitles[page] || "Қаржылық шолу")}</h1>
+          <p className="subtitle">{t(subtitles[page] || "")}</p>
+        </div>
         <div className="heading-actions">
           <button
             className="secondary"

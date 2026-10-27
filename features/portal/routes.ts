@@ -46,13 +46,16 @@ export const pageTitles: Record<string, string> = {
 export function isPortalPage(page: string) {
   return Object.hasOwn(pageTitles, page);
 }
-export function filtersFromSearch(search: URLSearchParams): ReportFilters {
+export function filtersFromSearch(search: URLSearchParams, page = ""): ReportFilters {
   const source = search.get("source");
+  const selectedSource = source === "ledger" || source === "workbook"
+    ? source
+    : page === "dashboard" ? "ledger" : "auto";
   return {
-    source: source === "ledger" || source === "workbook" ? source : "auto",
+    source: selectedSource,
     month: search.get("month") || "",
-    range: search.get("range") === "ytd" ? "ytd" : "month",
-    channel: search.get("channel") || "",
+    range: selectedSource !== "ledger" && search.get("range") === "ytd" ? "ytd" : "month",
+    channel: selectedSource === "ledger" ? "" : search.get("channel") || "",
     org: search.get("org") || "",
   };
 }

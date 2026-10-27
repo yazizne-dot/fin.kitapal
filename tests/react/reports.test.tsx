@@ -230,3 +230,23 @@ test("URL routes round-trip report filters with special characters", () => {
   );
   assert.equal(pageHref("dashboard", actions.filters), "/");
 });
+
+test("dashboard defaults to the PostgreSQL ledger without changing explicit report sources", () => {
+  const empty = new URLSearchParams();
+  assert.equal(filtersFromSearch(empty, "dashboard").source, "ledger");
+  assert.equal(filtersFromSearch(empty, "pnl").source, "auto");
+  for (const source of ["ledger", "workbook"] as const) {
+    assert.equal(filtersFromSearch(new URLSearchParams({ source }), "dashboard").source, source);
+  }
+  assert.equal(filtersFromSearch(new URLSearchParams({ source: "auto" }), "dashboard").source, "ledger");
+  assert.equal(filtersFromSearch(new URLSearchParams({ source: "auto" }), "pnl").source, "auto");
+  const staleWorkbookFilters = filtersFromSearch(new URLSearchParams({
+    source: "auto", range: "ytd", channel: "online", org: "Kitap Retail",
+  }), "dashboard");
+  assert.equal(staleWorkbookFilters.range, "month");
+  assert.equal(staleWorkbookFilters.channel, "");
+  assert.equal(staleWorkbookFilters.org, "Kitap Retail");
+  assert.equal(filtersFromSearch(new URLSearchParams({ source: "invalid" }), "dashboard").source, "ledger");
+  const dashboard = filtersFromSearch(new URLSearchParams({ month: "2026-09", org: "Kitap Retail" }), "dashboard");
+  assert.equal(pageHref("pnl", dashboard), "/pnl?source=ledger&month=2026-09&org=Kitap+Retail");
+});

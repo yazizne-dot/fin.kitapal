@@ -12,7 +12,7 @@ The Next.js portal already contains `LedgerView`, which reproduces the SQLite ov
 
 ## Chosen approach
 
-For the dashboard's initial URL, request `source=ledger` when no source is specified. Keep an explicit `source=workbook` selection unchanged, including the existing navigation control from the ledger view. Preserve the selected source, month, and organization when navigating from the dashboard to other finance pages. Do not change the authentication flow, PostgreSQL schema, ledger calculation, report overrides, or imported facts.
+For the dashboard's initial URL, request `source=ledger` when no source is specified or a stale `source=auto` link is opened. Drop workbook-only year-to-date and channel filters when entering ledger mode, while preserving month and organization. Keep an explicit `source=workbook` selection unchanged, including the existing navigation control from the ledger view. Preserve the selected source, month, and organization when navigating from the dashboard to other finance pages. Do not change the authentication flow, PostgreSQL schema, ledger calculation, report overrides, or imported facts.
 
 The ledger view continues to use its current layout and i18n strings. The demo badge reflects the provenance flag returned by the PostgreSQL ledger projection; it is shown only when that projection contains imported demo operations. Do not hardcode September 2026 or the sample KPI values. If the database has a later valid ledger month, the existing latest-month selection applies.
 

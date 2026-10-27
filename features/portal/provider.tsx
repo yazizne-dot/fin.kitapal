@@ -41,8 +41,8 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const { setLanguage } = useI18n();
   const searchKey = search.toString();
   const filters = useMemo(
-    () => filtersFromSearch(new URLSearchParams(searchKey)),
-    [searchKey],
+    () => filtersFromSearch(new URLSearchParams(searchKey), pathname.split("/")[1] || "dashboard"),
+    [searchKey, pathname],
   );
   const [data, setData] = useState<PortalData | null>(null),
     [phase, setPhase] = useState<"loading" | "ready" | "login" | "error">(

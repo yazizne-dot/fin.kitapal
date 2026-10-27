@@ -8,6 +8,9 @@ const EVENT_KINDS = Object.freeze({ revenue: 'sale', return: 'return', purchase:
   loan_repayment: 'loan_payment', asset: 'asset' });
 const KEY = /^sqlite\/operation\/([1-9]\d*)\/(event|cash)$/;
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+const LEGACY_ORGANIZATION_ORDER = new Map([
+  'Qalam Books', 'Kitap Retail', 'Dara Distribution',
+].map((name, index) => [name, index]));
 
 export function classifyLegacyOperation({ eventKind, cashDirection, settlementKinds = [], articleEventKinds = [], articleName }) {
   if (eventKind) {
@@ -217,7 +220,10 @@ async function readLegacyLedgerData({ client, principal, filters }) {
     const value = new Date(Date.UTC(+month.slice(0, 4), +month.slice(5) - 9 + index, 1)).toISOString().slice(0, 7);
     return { month: value, ...ledger(all.filter(row => row.date.startsWith(value))) };
   });
-  return { source: 'ledger', user: userJson(principal), orgs: orgs.map(row => row.name), kinds,
+  const organizationNames = orgs.map(row => row.name).sort((left, right) =>
+    (LEGACY_ORGANIZATION_ORDER.get(left) ?? Infinity) -
+    (LEGACY_ORGANIZATION_ORDER.get(right) ?? Infinity) || left.localeCompare(right));
+  return { source: 'ledger', user: userJson(principal), orgs: organizationNames, kinds,
     month, end, operations: current, allOperations: through,
     budget: budgetRows.map(row => ({ month: row.budget_month, org: row.org,
       metric: row.metric.slice('legacy.ledger.'.length), amount: safeDisplayMoney(row.amount) })),

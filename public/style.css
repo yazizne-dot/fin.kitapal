@@ -85,3 +85,8 @@ button.primary{background:var(--brand);border-color:var(--brand)}button.primary:
 @media(max-width:900px){.login-layout{grid-template-columns:minmax(0,40%) minmax(0,60%)}.login-decoration{width:55vw;opacity:.18}.login-art-content{padding:40px 24px}.login-logo{min-height:55px;padding:7px 9px}.login-brand .login-logo img{width:120px}.login-art-grid{margin-top:85px}.login-art .login-hero-copy h1{font-size:clamp(27px,3.6vw,34px);letter-spacing:-.7px}.login-art .login-hero-copy p{font-size:13px}.login-form{padding:80px 20px}.login-box{width:min(410px,100%);padding:34px 27px 37px}.login-language{right:22px}}
 @media(max-width:699px){.login-layout{grid-template-columns:1fr;background:linear-gradient(145deg,#8d5270 0%,#e6ccd8 70%,#e6ccd8 100%)}.login-decoration,.login-art{display:none}.login-form{grid-column:1;min-height:100vh;min-height:100dvh;padding:80px 18px}.login-box{width:min(420px,100%)}.mobile-company-brand{display:block;margin-bottom:24px}.mobile-company-brand img{width:150px;filter:none}.login-language{top:24px;right:20px}}
 @media(max-width:560px){.login-form{padding:80px 16px}.login-language{top:20px;right:16px}.login-box{padding:29px 24px 33px}.login-box h2{font-size:31px}.login-box .login-description{margin-bottom:23px}.login-box .login-field{margin-top:19px}}
+
+/* Keep the PostgreSQL ledger overview chart controls in the original dashboard header. */
+.ledger-layout .grid-main>.panel:first-child{position:relative}
+.ledger-layout .grid-main>.panel:first-child>.segmented{position:absolute;top:20px;right:21px;width:auto;z-index:1}
+@media(max-width:680px){.ledger-layout .grid-main>.panel:first-child>.segmented{position:static;width:max-content;margin:14px 16px 0}}

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { usePortal } from "./provider";
-import { pageHref, pageTitles } from "./routes";
+import { pageHref, pageTitles, reportPages } from "./routes";
 import { useI18n } from "../i18n/provider";
 import { Icon } from "../../components/ui/icon";
 import type { Language } from "../shared/types";
@@ -187,11 +187,13 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <div className="content" aria-busy={loading}>
-          <div className="page-heading">
-            <div>
-              <h1>{t(pageTitles[page] || "Қаржылық шолу")}</h1>
+          {!(data.source === "ledger" && reportPages.some((item) => item === page)) && (
+            <div className="page-heading">
+              <div>
+                <h1>{t(pageTitles[page] || "Қаржылық шолу")}</h1>
+              </div>
             </div>
-          </div>
+          )}
           {error && (
             <p className="error-message" role="alert">
               {t(error)}
