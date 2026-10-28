@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { usePortal } from "./provider";
-import { pageHref, pageTitles, reportPages } from "./routes";
+import { pageHref, reportPageTitle, reportPages } from "./routes";
 import { useI18n } from "../i18n/provider";
 import { Icon } from "../../components/ui/icon";
 import type { Language } from "../shared/types";
@@ -74,7 +74,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       onClick={() => setOpen(false)}
     >
       <Icon name={icons[key]} />
-      <span>{t(pageTitles[key])}</span>
+      <span>{t(reportPageTitle(key, data.source))}</span>
     </Link>
   );
   async function changeLanguage(value: Language) {
@@ -152,7 +152,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
             </button>
             <span>Kitapal</span>
             <span>/</span>
-            <strong>{t(pageTitles[page] || "Қаржылық шолу")}</strong>
+            <strong>{t(reportPageTitle(page, data.source))}</strong>
           </div>
           <div className="top-right">
             <select
@@ -190,7 +190,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           {!(data.source === "ledger" && reportPages.some((item) => item === page)) && (
             <div className="page-heading">
               <div>
-                <h1>{t(pageTitles[page] || "Қаржылық шолу")}</h1>
+                <h1>{t(reportPageTitle(page, data.source))}</h1>
               </div>
             </div>
           )}

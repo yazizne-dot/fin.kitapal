@@ -1,0 +1,24 @@
+[Unit]
+Description=Qarzhy Node API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qarzhy
+Group=qarzhy
+WorkingDirectory=/opt/qarzhy/current
+EnvironmentFile=/etc/qarzhy/backend.env
+ExecStart=/usr/bin/node backend/main.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

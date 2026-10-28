@@ -600,6 +600,13 @@ export function Operations({ data, onDetail }: ReportContext) {
     </>
   );
 }
+const checkLimitationLabels: Record<string, string> = {
+  "Balance coverage is missing or ambiguous for the requested date": "Для выбранной даты не подтверждено покрытие данных баланса.",
+  "Cash flow coverage is incomplete or splits the requested interval": "Покрытие данных движения денег за выбранный период не подтверждено полностью.",
+  "Historical imported budget; not an approved live budget version": "Показан исторический бюджет из исходного файла; это не утверждённый оперативный бюджет.",
+  "Previous-year channel revenue is unavailable without matching coverage": "Сравнение каналов с прошлым годом недоступно без подтверждённого покрытия данных.",
+};
+
 export function Checks({ data }: ReportContext) {
   const { t } = useI18n();
   return (
@@ -621,6 +628,12 @@ export function Checks({ data }: ReportContext) {
           </p>
         </div>
       </div>
+      {!!data.checkLimitations?.length && (
+        <div className="panel check-card">
+          <h3>{t("Ограничения проверки")}</h3>
+          <ul>{data.checkLimitations.map((text) => <li key={text}>{t(checkLimitationLabels[text] ?? text)}</li>)}</ul>
+        </div>
+      )}
       {data.checks.map((w, i) => (
         <div key={w.id || i} className="panel check-card">
           <div className="check-card-head">

@@ -48,20 +48,22 @@ export function isPortalPage(page: string) {
 }
 export function filtersFromSearch(search: URLSearchParams, page = ""): ReportFilters {
   const source = search.get("source");
-  const selectedSource = source === "ledger" || source === "workbook"
-    ? source
-    : page === "dashboard" ? "ledger" : "auto";
+  const savedLedgerDashboard = page === "dashboard" && source === "ledger";
+  const selectedSource = page === "dashboard" ? "workbook"
+    : source === "ledger" || source === "workbook" ? source : "auto";
   return {
     source: selectedSource,
     month: search.get("month") || "",
-    range: selectedSource !== "ledger" && search.get("range") === "ytd" ? "ytd" : "month",
-    channel: selectedSource === "ledger" ? "" : search.get("channel") || "",
-    org: search.get("org") || "",
+    range: !savedLedgerDashboard && selectedSource !== "ledger" && search.get("range") === "ytd" ? "ytd" : "month",
+    channel: savedLedgerDashboard || selectedSource === "ledger" ? "" : search.get("channel") || "",
+    org: savedLedgerDashboard ? "" : search.get("org") || "",
   };
 }
 export function pageHref(page: string, filters: ReportFilters) {
+  const selectedFilters: ReportFilters = page === "dashboard" && filters.source === "ledger"
+    ? { ...filters, source: "workbook", org: "", channel: "", range: "month" } : filters;
   const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters))
+  for (const [key, value] of Object.entries(selectedFilters))
     if (
       value &&
       !(key === "source" && value === "auto") &&
@@ -70,4 +72,8 @@ export function pageHref(page: string, filters: ReportFilters) {
       query.set(key, value);
   const path = page === "dashboard" ? "/" : `/${page}`;
   return path + (query.size ? "?" + query.toString() : "");
+}
+
+export function reportPageTitle(page: string, source: string) {
+  return page === "operations" && source === "workbook" ? "Есеп баптары" : pageTitles[page] || "Қаржылық шолу";
 }

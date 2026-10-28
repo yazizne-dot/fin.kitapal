@@ -17,10 +17,11 @@ const LABEL_KEYS = new Map([
 ]);
 
 function metricKey(row) {
+  if (row.unit && row.unit !== 'amount' || row.name?.includes('%')) return null;
   if (row.code.startsWith('live.pnl.')) return row.code.slice('live.pnl.'.length);
   if (INPUTS.includes(row.code) || DERIVED.includes(row.code)) return row.code;
   const label = row.name.split(':').at(-1).split('/').at(-1).trim().replace(/\s+/g, ' ').toUpperCase();
-  for (const [prefix, key] of LABEL_KEYS) if (label === prefix || label.startsWith(`${prefix} `)) return key;
+  for (const [prefix, key] of LABEL_KEYS) if (label === prefix || label.startsWith(`${prefix} `) || label.startsWith(`${prefix},`)) return key;
   return null;
 }
 
@@ -84,7 +85,7 @@ export async function getPnlPeriod({ pool, principal, scopeId, start, end, perio
   let rows = [];
 
   if (selected === 'historical') {
-    rows = (await pool.query(`SELECT m.id AS metric_id,m.code,m.name,h.value::text AS original,
+    rows = (await pool.query(`SELECT m.id AS metric_id,m.code,m.name,m.unit,h.external_key,h.id AS historical_value_id,h.value::text AS original,
       h.availability,o.value::text AS override_value,s.article_id,s.channel_id
       FROM qarzhy.historical_series s JOIN qarzhy.historical_values h ON h.series_id=s.id
       JOIN qarzhy.report_metrics m ON m.id=s.metric_id
@@ -95,21 +96,30 @@ export async function getPnlPeriod({ pool, principal, scopeId, start, end, perio
       WHERE s.dataset_id=$1 AND s.scope_id=$2 AND s.report_family='pnl'
         AND h.period_start=$3 AND h.period_end=$4 AND h.period_kind=$5
       ORDER BY m.id`, [datasetId, scope, from, to, periodKind])).rows;
-    const recognized = new Set();
+    const recognized = new Set(), reported = {};
     for (const row of rows) {
       row.key = metricKey(row);
       row.value = row.override_value ?? row.original;
       if (!row.key || row.article_id || row.channel_id) continue;
       if (recognized.has(row.key)) {
         warnings.push(`Ambiguous historical metric: ${row.key}`);
+        reported[row.key] = null;
         if (INPUTS.includes(row.key)) base[row.key] = null;
         else delete overrides[row.key];
         continue;
       }
       recognized.add(row.key);
+      reported[row.key] = row.value;
       if (INPUTS.includes(row.key)) base[row.key] = row.value;
       else if (row.override_value !== null) overrides[row.key] = row.override_value;
     }
+    if (base.dividends === null && reported.profit != null && reported.retained != null)
+      base.dividends = new Exact(reported.profit).minus(reported.retained).toFixed(2);
+    // Cached source totals are authoritative until an aggregate correction
+    // explicitly asks us to recalculate their dependants.
+    const edited = rows.some(row => row.key && row.override_value !== null);
+    if (!edited) for (const key of DERIVED)
+      if (reported[key] != null) overrides[key] = reported[key];
     const missing = INPUTS.filter(key => base[key] === null);
     if (missing.length) warnings.push(`Missing historical P&L figures: ${missing.join(', ')}`);
   } else if (selected === 'events') {

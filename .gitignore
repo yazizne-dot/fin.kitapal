@@ -34,3 +34,9 @@ out/
 
 # Local comparison worktrees
 .worktrees/
+
+# Local PostgreSQL cluster and binaries
+data/local-postgres/
+
+# macOS Finder metadata
+.DS_Store

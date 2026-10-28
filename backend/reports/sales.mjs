@@ -37,3 +37,34 @@ export async function getLiveChannelSales({ pool, principal, organizationId, dat
       gross: value(revenue.minus(cost)), previousRevenue: null, sources: row.sources };
   });
 }
+
+// Imported channels are dimensions of the source P&L rows. They need not have
+// live sales_channels IDs; keep the original label as the historical filter ID.
+export function historicalChannels(rows, month) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const path = row.name?.split(':').slice(1).join(':').trim().split('/');
+    if (!path || path.length !== 2) continue;
+    const section = path[0].trim(), label = path[1].trim();
+    const key = section === 'ВЫРУЧКА ОТ РЕАЛИЗАЦИИ' ? 'revenue'
+      : section === 'СЕБЕСТОИМОСТЬ РЕАЛИЗОВАННОЙ ПРОДУКЦИИ' ? 'cost' : null;
+    if (!key || !label.startsWith('Продажи_')) continue;
+    const channel = grouped.get(label) ?? { id: label, revenue: [], cost: [], sources: [] };
+    channel[key].push(row.value === null || row.value === undefined ? null : new Exact(row.value));
+    channel.sources.push({ sheet: 'qarzhy.report_metrics', cell: String(row.metric_id), period: month });
+    grouped.set(label, channel);
+  }
+  const labels = { 'Продажи_по_дитрибьюторам': 'Дистрибьюторлар',
+    'Продажи_интернет_операторы': 'Интернет операторлар', 'Продажи_оптовые': 'Көтерме сату',
+    'Продажи_Каспи': 'Kaspi', 'Продажи_Сайт': 'Сайт', 'Продажи_Тендер': 'Тендер', 'Продажи_Экстра': 'Экстра' };
+  return [...grouped.values()].filter(row => row.revenue.length).map(row => {
+    const revenue = row.revenue.length === 1 ? row.revenue[0] : null;
+    const cost = row.cost.length === 1 ? row.cost[0] : null;
+    const label = row.id.startsWith('Продажи_по_магазинам_')
+      ? row.id.slice('Продажи_по_магазинам_'.length).replaceAll('_', ' · ')
+      : labels[row.id] ?? row.id.replaceAll('_', ' ');
+    return { id: row.id, label, revenue: revenue === null ? null : value(revenue),
+      cost: cost === null ? null : value(cost), gross: revenue === null || cost === null ? null : value(revenue.minus(cost)),
+      previousRevenue: null, sources: row.sources };
+  });
+}

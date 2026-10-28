@@ -123,7 +123,7 @@ export async function listEditableFigures({ pool, principal, filters }) {
   }
   const rows = (await pool.query(`SELECT m.id AS metric_id,m.name AS label,h.value::text AS original,
     h.availability,coalesce(o.value,h.value)::text AS value,o.id IS NOT NULL AS overridden,
-    s.article_id,s.channel_id
+    s.article_id,s.channel_id,h.external_key
     FROM qarzhy.historical_series s JOIN qarzhy.historical_values h ON h.series_id=s.id
     JOIN qarzhy.report_metrics m ON m.id=s.metric_id
     LEFT JOIN qarzhy.report_overrides o ON o.dataset_id=s.dataset_id AND o.report_family=s.report_family

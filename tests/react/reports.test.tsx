@@ -231,22 +231,43 @@ test("URL routes round-trip report filters with special characters", () => {
   assert.equal(pageHref("dashboard", actions.filters), "/");
 });
 
-test("dashboard defaults to the PostgreSQL ledger without changing explicit report sources", () => {
-  const empty = new URLSearchParams();
-  assert.equal(filtersFromSearch(empty, "dashboard").source, "ledger");
-  assert.equal(filtersFromSearch(empty, "pnl").source, "auto");
-  for (const source of ["ledger", "workbook"] as const) {
-    assert.equal(filtersFromSearch(new URLSearchParams({ source }), "dashboard").source, source);
-  }
-  assert.equal(filtersFromSearch(new URLSearchParams({ source: "auto" }), "dashboard").source, "ledger");
-  assert.equal(filtersFromSearch(new URLSearchParams({ source: "auto" }), "pnl").source, "auto");
-  const staleWorkbookFilters = filtersFromSearch(new URLSearchParams({
-    source: "auto", range: "ytd", channel: "online", org: "Kitap Retail",
-  }), "dashboard");
-  assert.equal(staleWorkbookFilters.range, "month");
-  assert.equal(staleWorkbookFilters.channel, "");
-  assert.equal(staleWorkbookFilters.org, "Kitap Retail");
-  assert.equal(filtersFromSearch(new URLSearchParams({ source: "invalid" }), "dashboard").source, "ledger");
-  const dashboard = filtersFromSearch(new URLSearchParams({ month: "2026-09", org: "Kitap Retail" }), "dashboard");
-  assert.equal(pageHref("pnl", dashboard), "/pnl?source=ledger&month=2026-09&org=Kitap+Retail");
+test("dashboard opens imported reports while retaining explicit ledger navigation", () => {
+  assert.equal(filtersFromSearch(new URLSearchParams(), "dashboard").source, "workbook");
+  assert.equal(filtersFromSearch(new URLSearchParams(), "pnl").source, "auto");
+  assert.equal(filtersFromSearch(new URLSearchParams({ source: "workbook" }), "dashboard").source, "workbook");
+  assert.equal(filtersFromSearch(new URLSearchParams({ source: "ledger" }), "pnl").source, "ledger");
+  for (const source of ["auto", "invalid"])
+    assert.equal(filtersFromSearch(new URLSearchParams({ source }), "dashboard").source, "workbook");
+  const imported = filtersFromSearch(new URLSearchParams({ range: "ytd", channel: "Продажи_Каспи" }), "dashboard");
+  assert.equal(imported.range, "ytd");
+  assert.equal(imported.channel, "Продажи_Каспи");
+  const ledger = filtersFromSearch(new URLSearchParams({ source: "ledger", range: "ytd", channel: "old", org: "Kitap Retail" }), "pnl");
+  assert.equal(ledger.range, "month");
+  assert.equal(ledger.channel, "");
+  assert.equal(pageHref("pnl", ledger), "/pnl?source=ledger&org=Kitap+Retail");
+});
+
+test("saved ledger dashboard URLs open imported reports without stale organization filters", () => {
+  const filters = filtersFromSearch(new URLSearchParams({ source: "ledger", month: "2026-08", org: "Kitap Retail" }), "dashboard");
+  assert.equal(filters.source, "workbook");
+  assert.equal(filters.month, "2026-08");
+  assert.equal(filters.org, "");
+  assert.equal(filtersFromSearch(new URLSearchParams({ source: "ledger", org: "Kitap Retail" }), "operations").source, "ledger");
+  assert.equal(pageHref("dashboard", { source: "ledger", month: "2026-08", range: "month", channel: "", org: "Kitap Retail" }), "/?source=workbook&month=2026-08");
+});
+
+test("workbook operations page is titled report articles while the ledger retains operations", async () => {
+  const { reportPageTitle } = await import("../../features/portal/routes");
+  assert.equal(translate(reportPageTitle("operations", "workbook"), "ru"), "Статьи отчёта");
+  assert.equal(translate(reportPageTitle("operations", "ledger"), "ru"), "Операции");
+});
+
+test('check limitations appear separately from numeric discrepancy cards', {skip:!workbookDataset}, () => {
+  const data=report({month:'2026-07'});
+  data.checks=[];
+  data.checkLimitations=['Формулы бюджетных ячеек не перенесены в PostgreSQL'];
+  const html=render(<WorkbookView {...actions} data={data} page="checks" />);
+  assert.match(html,/Ограничения проверки/);
+  assert.match(html,/Формулы бюджетных ячеек/);
+  assert.doesNotMatch(html,/class="check-values"/);
 });

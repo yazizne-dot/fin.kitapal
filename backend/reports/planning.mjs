@@ -1,5 +1,5 @@
 import { requirePermission } from '../auth/guards.mjs';
-import { FinanceError, dateOnly } from '../finance/validation.mjs';
+import { FinanceError, dateOnly, id, Exact } from '../finance/validation.mjs';
 import { assertReportScope } from './access.mjs';
 import { getCoverage } from './coverage.mjs';
 
@@ -10,6 +10,8 @@ export async function getBudgetPeriod({ pool, principal, scopeId, start, end, pn
   const scope = await assertReportScope(pool, principal, scopeId);
   const from = dateOnly(start), to = dateOnly(end);
   if (from >= to || from.slice(8) !== '01') throw new FinanceError('Invalid budget period');
+  if (pnl?.source === 'historical')
+    return getHistoricalBudget({ pool, scope, from, datasetId: id(pnl.datasetId, 'dataset ID'), pnl });
   const coverage = await getCoverage({ pool, principal, family: 'budget', scopeId: scope, start: from, end: to });
   const warnings = [];
   if (!coverage.complete || coverage.intervals.length !== 1 || coverage.intervals[0].source_kind !== 'budget')
@@ -48,4 +50,82 @@ export async function getBudgetPeriod({ pool, principal, scopeId, start, end, pn
   const opex = rows.find(row => row.label === OPEX_LABEL);
   return { rows, timeline: [{ month: from.slice(0, 7), plan: opex?.plan ?? null,
     actual: opex?.actual ?? null }], coverage, warnings, versionId: version.id };
+}
+
+
+// Historical workbook budgets are reported source values, not approved live
+// budget versions. The source cell identifies plan vs actual unambiguously.
+async function getHistoricalBudget({ pool, scope, from, datasetId, pnl }) {
+  const year = from.slice(0, 4);
+  const values = (await pool.query(`SELECT h.id,h.external_key,h.period_start::text,
+    h.value::text AS original,o.value::text AS override_value,m.name,m.unit
+    FROM qarzhy.historical_series s
+    JOIN qarzhy.historical_values h ON h.series_id=s.id
+    JOIN qarzhy.report_metrics m ON m.id=s.metric_id
+    LEFT JOIN qarzhy.report_overrides o ON o.dataset_id=s.dataset_id AND o.scope_id=s.scope_id
+      AND o.report_family='budget' AND o.period_start=h.period_start AND o.period_end=h.period_end
+      AND o.period_kind=h.period_kind AND o.metric_id=s.metric_id
+      AND o.article_id IS NOT DISTINCT FROM s.article_id AND o.channel_id IS NOT DISTINCT FROM s.channel_id
+    WHERE s.dataset_id=$1 AND s.scope_id=$2 AND s.report_family='budget'
+      AND h.period_kind='monthly' AND h.period_start >= $3 AND h.period_start < $4
+    ORDER BY h.period_start,h.id`,
+  [datasetId, scope, `${year}-01-01`, `${Number(year)+1}-01-01`])).rows;
+  const months = new Map(), warnings = ['Historical imported budget; not an approved live budget version'];
+  const number = value => value === null || value === undefined ? null : Number(value);
+  for (const value of values) {
+    const origin = /^pnl\/(Бюджет[^/]+)\/(\d+)\/([A-Z]+)$/.exec(value.external_key ?? '');
+    if (!origin) continue;
+    const [, sheet, rowId, column] = origin;
+    const period = value.period_start.slice(0, 7);
+    const ordinal = [...column].reduce((n, letter) => n*26 + letter.charCodeAt(0)-64, 0);
+    const planColumn = 2 + (Number(period.slice(5))-1)*3;
+    const field = ordinal === planColumn ? 'plan' : ordinal === planColumn+1 ? 'actual' : null;
+    if (!field) continue; // Fulfilment is a ratio, never a third money amount.
+    const label = value.name.slice(value.name.indexOf(':')+1).trim();
+    if (label.includes('Бонус дистрибьюторам')) continue;
+    const monthly = months.get(period) ?? new Map();
+    const row = monthly.get(`${sheet}/${rowId}`) ?? { id: rowId, label,
+      display: label.replaceAll('_', ' '), total: label.startsWith('ИТОГО') ||
+        ['ПРОЧИЕ РАСХОДЫ', 'Тотал'].includes(label), plan: null, actual: null,
+      referenceActual: null, sources: [], seen: new Set() };
+    const amount = number(value.override_value ?? value.original);
+    if (row.seen.has(field)) {
+      row[field] = null;
+      warnings.push(`Ambiguous historical budget ${period}: ${label} ${field}`);
+    } else row[field] = amount;
+    row.seen.add(field);
+    const refs = row.sources[0] ?? { period,
+      plan: { period, sheet, cell: '', value: null }, actual: { period, sheet, cell: '', value: null } };
+    refs[field] = { period, sheet, cell: `${column}${rowId}`, value: amount };
+    row.sources[0] = refs;
+    monthly.set(`${sheet}/${rowId}`, row); months.set(period, monthly);
+  }
+  const rows = [...(months.get(from.slice(0, 7))?.values() ?? [])]
+    .sort((a,b) => Number(a.id)-Number(b.id)).map(({seen, ...row}) => {
+      const matching = (pnl.rows ?? []).filter(value => value.name.split('/').at(-1).trim() === row.label);
+      if (matching.length === 1) row.referenceActual = number(matching[0].value);
+      return row;
+    });
+  const timeline = Array.from({length: 12}, (_, index) => {
+    const month = `${year}-${String(index+1).padStart(2,'0')}`;
+    const total = [...(months.get(month)?.values() ?? [])].find(row => row.label === 'Тотал');
+    return { month, plan: total?.plan ?? null, actual: total?.actual ?? null };
+  });
+  return { rows, timeline, warnings, source: 'historical' };
+}
+
+
+export function aggregateHistoricalBudgetRows(periods) {
+  const rows = new Map();
+  for (const period of periods) for (const item of period.rows) {
+    const row = rows.get(item.id) ?? { ...item, plan: null, actual: null,
+      referenceActual: null, sources: [] };
+    for (const field of ['plan', 'actual', 'referenceActual'])
+      if (item[field] !== null && item[field] !== undefined)
+        row[field] = new Exact(row[field] ?? 0).plus(item[field]);
+    row.sources.push(...item.sources); rows.set(item.id, row);
+  }
+  return [...rows.values()].map(row => ({ ...row,
+    ...Object.fromEntries(['plan', 'actual', 'referenceActual'].map(field =>
+      [field, row[field] === null ? null : Number(row[field].toFixed(2))])) }));
 }

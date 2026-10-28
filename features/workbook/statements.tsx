@@ -61,6 +61,7 @@ export function BalancePage({
     b = data.statements?.balance;
   if (!b) return <Missing text={data.metadata.file.startsWith("PostgreSQL") ? "Бұл күнге расталған бастапқы баланс жоқ." : "Баланс файлы жүктелмеген."} />;
   const relational = b.metadata.file.startsWith("PostgreSQL");
+  const historical = b.historical === true;
   const v = (id: string) => b.rows.find((r) => r.id === id)?.value;
   return (
     <>
@@ -71,11 +72,12 @@ export function BalancePage({
             {t("Баланс күні")}: {b.asOfLabel}
           </b>{" "}
           · {t("компания бойынша")}.<br />
-          {t(relational
+          {t(historical ? "Исторический баланс на указанную дату. Фильтр месяца не изменяет дату снимка. Статус: не утверждён как начальный баланс." : relational
             ? "Қалдық расталған бастапқы сәттен және кейінгі қозғалыстардан есептеледі. Расталмаған баптар бос көрсетіледі."
             : "Бұл — 01.09.2026 күнгі бір сәттік қалдық. Жоғарғы ай/арна сүзгілері баланс күнін өзгертпейді. Бастапқы қалдық пен кезең өзгерісі үшін алдыңғы күннің балансы керек.")}
         </p>
       </div>
+      {historical && <div className="method-note"><p>{b.metadata.limitations?.join(" ")}</p></div>}
       <section className="kpi-grid">
         <Card
           label="Активтер"
@@ -98,7 +100,7 @@ export function BalancePage({
         <Card
           label="Меншікті капитал"
           value={v("equity")}
-          note={relational ? "расталған капитал дерегі қажет" : "файлда: активтер − міндеттемелер"}
+          note={historical ? "Исторический свод: активы − обязательства" : relational ? "расталған капитал дерегі қажет" : "файлда: активтер − міндеттемелер"}
           icon="chart"
         />
       </section>
@@ -108,7 +110,7 @@ export function BalancePage({
             <h2>{t("Басқарушылық баланс")}</h2>
             <p>
               {b.metadata.file} ·{" "}
-              {t(relational ? "расталған бастапқы қалдық және тіркелген қозғалыстар" : "түпнұсқа C бағаны; қайталанған F бағаны қосылмайды")}
+              {t(historical ? "Сохранённый свод исходного файла; не расчёт текущих остатков" : relational ? "расталған бастапқы қалдық және тіркелген қозғалыстар" : "түпнұсқа C бағаны; қайталанған F бағаны қосылмайды")}
             </p>
           </div>
           <span className="status">{b.asOfLabel}</span>
@@ -441,6 +443,7 @@ export function StatementDetailView({
     const b = data.statements?.balance;
     if (!b) return null;
     const relational = b.metadata.file.startsWith("PostgreSQL");
+  const historical = b.historical === true;
     const row = b.rows.find((r) => r.id === detail.id);
     if (!row) return null;
     const sets: Record<string, BalanceDetail[]> = {

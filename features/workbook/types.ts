@@ -88,6 +88,8 @@ export interface BalanceDetail {
   contract?: string;
 }
 export interface BalanceStatement {
+  historical?: boolean;
+  snapshotStatus?: string;
   date: string;
   asOfLabel: string;
   metadata: FileMetadata;
@@ -169,6 +171,7 @@ export interface WorkbookData {
   }[];
   checks: CheckRow[];
   allCheckCount: number;
+  checkLimitations?: string[];
   metadata: FileMetadata;
   statements?: {
     balance: BalanceStatement | null;

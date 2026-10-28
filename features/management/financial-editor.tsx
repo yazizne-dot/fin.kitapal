@@ -137,7 +137,7 @@ export function FinancialEditorView({ api, refresh }: ManagementProps) {
                   <tbody>
                     {data?.rows.map((item) => (
                       <tr key={item.cell}>
-                        <td>{item.cell}</td>
+                        <td>{item.displayCell ?? item.cell}</td>
                         <td
                           style={{ whiteSpace: "normal", maxWidth: 300 }}
                           data-no-i18n
@@ -209,7 +209,7 @@ export function FinancialEditorView({ api, refresh }: ManagementProps) {
             error={action.error}
           >
             <p data-no-i18n>
-              {data.book} · {data.sheet} · {row.cell}
+              {data.book} · {data.sheet} · {row.displayCell ?? row.cell}
               <br />
               {row.label}
             </p>

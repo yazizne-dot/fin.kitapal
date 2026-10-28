@@ -37,6 +37,7 @@ export interface ExpensesResponse {
   categories: string[];
 }
 export interface EditorRow {
+  displayCell?: string;
   cell: string;
   label: string;
   original: number | string | null;

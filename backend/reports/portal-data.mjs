@@ -1,10 +1,13 @@
+import {getHistoricalBalance} from './historical-balance.mjs';
+import {historicalChecks,getHistoricalIssues,missingHistoricalChecks} from './historical-checks.mjs';
 import { requirePermission } from '../auth/guards.mjs';
+import {getHistoricalReportDetails, aggregateReportDetails} from './historical-details.mjs';
 import { Exact, FinanceError } from '../finance/validation.mjs';
 import { getPnlPeriod } from './pnl.mjs';
 import { getCashflowPeriod } from './cashflow.mjs';
 import { getBalanceAt } from './balance.mjs';
-import { getBudgetPeriod } from './planning.mjs';
-import { getLiveChannelSales } from './sales.mjs';
+import { getBudgetPeriod, aggregateHistoricalBudgetRows } from './planning.mjs';
+import { getLiveChannelSales, historicalChannels } from './sales.mjs';
 
 const METRICS = ['revenue', 'cost', 'gross', 'opex', 'operatingProfit', 'otherExpense',
   'taxes', 'bonuses', 'otherIncome', 'profit', 'dividends', 'retained'];
@@ -141,6 +144,10 @@ async function buildYearToDate({ pool, principal, filters, scope, month, availab
     Promise.all(months.map(value => getPnlPeriod({ pool, principal, scopeId: scope.id,
       start: `${priorYear}${value.slice(4)}-01`, end: periodEnd(`${priorYear}${value.slice(4)}`), source }))),
   ]);
+  const historicalBudgets = source === 'historical'
+    ? await Promise.all(months.map((value, index) => getBudgetPeriod({ pool, principal, scopeId: scope.id,
+      start: `${value}-01`, end: periodEnd(value), pnl: current[index] }))) : [];
+  const budgetRows = aggregateHistoricalBudgetRows(historicalBudgets);
   const complete = current.length > 0 && current.every(period => period.source &&
     period.figures.revenue !== null && period.figures.cost !== null);
   const report = Object.fromEntries(METRICS.map(key => [key, complete ? sumMonthly(current, key) : null]));
@@ -148,7 +155,8 @@ async function buildYearToDate({ pool, principal, filters, scope, month, availab
     ? Object.fromEntries(METRICS.map(key => [key, sumMonthly(prior, key)])) : null;
   const history = current.flatMap((period, index) => period.source && period.figures.revenue !== null
     ? [{ month: months[index], ...Object.fromEntries(METRICS.map(key => [key, display(period.figures[key])])) }] : []);
-  const details = current.flatMap((period, index) => period.rows
+  const details = source === 'historical' ? aggregateReportDetails(await Promise.all(current.map((period,index) =>
+    getHistoricalReportDetails({pool,pnl:period,scopeId:scope.id,month:months[index]})))) : current.flatMap((period, index) => period.rows
     .filter(row => row.key && row.value !== undefined)
     .map(row => ({ id: `${months[index]}-${row.metric_id}`, label: row.name, display: row.name,
       group: row.key, value: display(row.value), manual: row.override_value !== null,
@@ -159,7 +167,9 @@ async function buildYearToDate({ pool, principal, filters, scope, month, availab
   const warnings = current.flatMap((period, index) => period.warnings.map(warning =>
     `${months[index]}: ${warning}`));
   if (!complete) warnings.push('YTD P&L requires covered monthly figures from January through the selected month');
-  warnings.push('YTD budget and channel totals require separately verified coverage');
+  warnings.push(source === 'historical'
+    ? 'Historical budget totals sum imported monthly values; not an approved live budget'
+    : 'YTD budget and channel totals require separately verified coverage');
   const checks = warnings.map((warning, index) => ({
     id: `ytd-${index}`, period: month, kind: 'coverage', title: warning,
     reported: null, calculated: null, difference: null,
@@ -192,7 +202,7 @@ async function buildYearToDate({ pool, principal, filters, scope, month, availab
         start: `${month.slice(0, 4)}-01-01`, end }),
     ]);
     const shown = presentCashflow(cashflow, balance, month);
-    statements = { balance: presentBalance(balance), cashflow: shown
+    statements = { balance: base.statements?.balance?.historical ? base.statements.balance : presentBalance(balance), cashflow: shown
       ? { ...shown, range: 'ytd', periods: months } : null };
     for (const warning of [...balance.warnings, ...cashflow.warnings]) checks.push({
       id: `ytd-${checks.length}`, period: month, kind: 'coverage', title: warning,
@@ -204,9 +214,17 @@ async function buildYearToDate({ pool, principal, filters, scope, month, availab
     WHERE scope_id=$1 AND report_family='pnl' AND period_kind='monthly'
       AND period_start >= $2 AND period_end <= $3`,
   [scope.id, `${month.slice(0, 4)}-01-01`, periodEnd(through)])).rows[0].n : 0;
-  return { ...base, range: 'ytd', aggregation: 'monthly-sum', actualThrough: complete ? through : null,
+  let yearChecks = checks, yearRecalculated = null, checkLimitations = base.checkLimitations ?? [];
+  if (source === 'historical') {
+    const result = historicalChecks({month,pnl:{figures:report,rows:[]},details,budget:{rows:budgetRows}});
+    yearChecks = [...result.checks,...checks.filter(row=>row.kind!=='coverage'),
+      ...base.checks.filter(row=>row.kind==='balance-reconciliation')];
+    yearRecalculated = result.recalculated;
+    checkLimitations = [...new Set([...checkLimitations,...checks.filter(row=>row.kind==='coverage').map(row=>row.title)])];
+  }
+  return { ...base, recalculated:yearRecalculated, checkLimitations, range: 'ytd', aggregation: 'monthly-sum', actualThrough: complete ? through : null,
     actualAvailable: complete, report, previous, history, details, refs,
-    budgetRows: [], budgetTimeline: [], channels: [], checks, allCheckCount: checks.length,
+    budgetRows, budgetTimeline: source === 'historical' ? base.budgetTimeline : [], channels: [], checks:yearChecks, allCheckCount: yearChecks.length,
     statements, overrideCount,
     metadata: { ...base.metadata, method: 'Sum of covered monthly PostgreSQL P&L figures',
       limitations: checks.map(row => row.title) } };
@@ -239,7 +257,7 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
   const report = Object.fromEntries(METRICS.map(key => [key, display(pnl.figures[key])]));
   const budget = await getBudgetPeriod({ pool, principal, scopeId: scope.id, start, end, pnl });
   const channels = pnl.source === 'events' ? await getLiveChannelSales({ pool, principal,
-    organizationId: scope.organization_id, datasetId: pnl.datasetId, start, end }) : [];
+    organizationId: scope.organization_id, datasetId: pnl.datasetId, start, end }) : pnl.source === 'historical' ? historicalChannels(pnl.rows, month) : [];
   const channelId = filters.channel || '';
   const selectedChannel = channelId ? channels.find(row => row.id === channelId) : null;
   if (channelId && !selectedChannel) throw new FinanceError('Sales channel not available in this report', 404);
@@ -260,23 +278,36 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
   const priorMonth = `${String(Number(month.slice(0, 4)) - 1).padStart(4, '0')}${month.slice(4)}`;
   const previous = selectedChannel ? null : await comparablePnl({ pool, principal,
     scopeId: scope.id, month: priorMonth, source: pnlSource });
-  const details = pnl.rows.filter(row => row.key && row.value !== undefined).map(row => {
+  const summaryDetails = pnl.rows.filter(row => row.key && row.value !== undefined).map(row => {
     const source = { sheet: 'qarzhy.report_metrics', cell: String(row.metric_id), period: month,
       value: display(row.original), raw: row.original };
     return { id: String(row.metric_id), label: row.name, display: row.name, group: row.key,
       value: display(row.value), sources: [source], manual: row.override_value !== null };
   });
+  const details = pnl.source === 'historical' ? await getHistoricalReportDetails({pool,pnl,scopeId:scope.id,month,channel:channelId})
+    : selectedChannel ? [] : summaryDetails;
   const refs = {};
-  for (const row of details) (refs[row.group] ??= []).push(...row.sources);
-  const checks = [...pnl.warnings, ...balance.warnings, ...cashflow.warnings,
+  for (const row of summaryDetails) (refs[row.group] ??= []).push(...row.sources);
+  let checks = [...pnl.warnings, ...balance.warnings, ...cashflow.warnings,
     ...(selectedChannel ? [] : budget.warnings),
-    ...(pnl.source === 'events' ? [] : ['Sales channels need live event coverage']),
+    ...(!channels.length && pnl.source !== 'events' ? ['Sales channel details are unavailable for this period'] : []),
     ...(selectedChannel ? ['Channel overhead is not allocated; channel profit is unavailable'] : []),
     ...(channels.length && channels.some(row => row.previousRevenue === null)
       ? ['Previous-year channel revenue is unavailable without matching coverage'] : [])]
     .map((warning, index) => ({ id: `coverage-${index}`, period: month, kind: 'coverage',
       title: warning, reported: null, calculated: null, difference: null,
       sheet: 'qarzhy.coverage_rules', cell: '', detail: warning }));
+  let recalculated = null, checkLimitations = [];
+  if (pnl.source === 'historical') {
+    checkLimitations = [...new Set([...checks.map(row => row.title), ...missingHistoricalChecks])];
+    const result = historicalChecks({month,pnl:{...pnl,figures:report},details,
+      budget:selectedChannel?{rows:[]}:budget,
+      issues:selectedChannel?[]:await getHistoricalIssues(pool,pnl.datasetId,scope.id)});
+    checks = result.checks;
+    recalculated = selectedChannel ? null : result.recalculated;
+  }
+  const historicalBalance = pnl.source === 'historical' && !selectedChannel
+    ? await getHistoricalBalance({pool,principal,scopeId:scope.id,datasetId:pnl.datasetId}) : null;
   const actualAvailable = Boolean(pnl.source) && METRICS.some(key => report[key] !== null);
   const revision = (await pool.query('SELECT revision FROM qarzhy.financial_state WHERE singleton=true')).rows[0]?.revision;
   const overrideCount = (await pool.query(`SELECT count(*)::int AS n FROM qarzhy.report_overrides
@@ -289,13 +320,13 @@ export async function buildPortalFinanceData({ pool, principal, filters = {} }) 
       org: principal.org ?? '', point: principal.point ?? '' },
     month, range: 'month', aggregation: 'PostgreSQL', channel: channelId,
     periods: available.periods, latest: available.latestActual,
-    actualThrough: actualAvailable ? month : null, actualAvailable, report, recalculated: null,
-    previous, details: selectedChannel ? [] : details, refs: selectedChannel ? {} : refs,
+    actualThrough: actualAvailable ? month : null, actualAvailable, report, recalculated, checkLimitations,
+    previous, details, refs: selectedChannel ? {} : refs,
     channels, history: selectedChannel ? (actualAvailable ? [{ month, ...report }] : []) : history,
     budgetRows: selectedChannel ? [] : budget.rows,
     budgetTimeline: selectedChannel ? [] : budget.timeline, checks, allCheckCount: checks.length,
     metadata: { file: 'PostgreSQL qarzhy', method: 'Relational finance reports', unit: 'KZT',
-      limitations: checks.map(row => row.title) }, statements: { balance: selectedChannel ? null : presentBalance(balance),
+      limitations: [...checkLimitations, ...checks.map(row => row.title)] }, statements: { balance: selectedChannel ? null : historicalBalance ?? presentBalance(balance),
       cashflow: selectedChannel ? null : presentCashflow(cashflow, balance, month) },
     overrideCount: selectedChannel ? 0 : overrideCount,
     siteEntryCount: 0, financialRevision: Number(revision ?? 0) };
