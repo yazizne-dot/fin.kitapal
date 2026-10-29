@@ -212,6 +212,11 @@ export function Dashboard({ data, navigate, onDrill }: ReportContext) {
     </>
   );
 }
+const formatRounded = (value: number | null | undefined) =>
+  value == null
+    ? "—"
+    : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
+
 export function Pnl({ data, navigate, onDrill, onDetail }: ReportContext) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState<MetricKey[]>([]);
@@ -239,7 +244,7 @@ export function Pnl({ data, navigate, onDrill, onDetail }: ReportContext) {
             </h2>
             <p>{t("Құрылым мен баптар Excel файлына сәйкес сақталған")}</p>
           </div>
-          <span className="subtle">{t("теңге · 2 ондық белгі")}</span>
+          <span className="subtle">{t("теңге · бүтін сан")}</span>
         </div>
         <div className="table-wrap">
           <table className="table report-table wb-pnl">
@@ -306,18 +311,18 @@ export function Pnl({ data, navigate, onDrill, onDetail }: ReportContext) {
                             data-wb-drill={key}
                             onClick={() => onDrill(key)}
                           >
-                            {format(source)}
+                            {formatRounded(source)}
                           </button>
                         </td>
                         <td className={`num ${significant ? "negative" : ""}`}>
-                          {format(calc)}
+                          {formatRounded(calc)}
                           {significant && (
                             <small className="cell-note">
-                              Δ {format(delta)}
+                              Δ {formatRounded(delta)}
                             </small>
                           )}
                         </td>
-                        <td className="num">{format(prior)}</td>
+                        <td className="num">{formatRounded(prior)}</td>
                         <td
                           className={`num ${change(source, prior) != null && change(source, prior)! < 0 ? "negative" : ""}`}
                         >
@@ -333,7 +338,7 @@ export function Pnl({ data, navigate, onDrill, onDetail }: ReportContext) {
                             onClick={() => onDetail(row)}
                           >
                             <td>{row.display}</td>
-                            <td className="num">{format(row.value)}</td>
+                            <td className="num">{formatRounded(row.value)}</td>
                             <td className="num subtle">
                               {row.sources.length === 1
                                 ? row.sources[0].cell

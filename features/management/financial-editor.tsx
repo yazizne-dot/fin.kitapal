@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
+import Decimal from "decimal.js";
 import {
   FormModal,
   Localized,
-  amount,
   useAction,
   useResource,
   type EditorResponse,
@@ -12,10 +12,11 @@ import {
 
 function editorAmount(value: number | string | null) {
   if (value === null) return "—";
-  if (typeof value === "number") return amount(value);
-  if (!/^-?\d+(?:\.\d+)?$/.test(value)) return "—";
-  const [integer, fraction] = value.split(".");
-  return integer.replace(/\B(?=(\d{3})+(?!\d))/g, " ") + (fraction ? `,${fraction}` : "");
+  if (typeof value === "number" && !Number.isFinite(value)) return "—";
+  if (typeof value === "string" && !/^-?\d+(?:\.\d+)?$/.test(value)) return "—";
+  return new Decimal(value)
+    .toFixed(0, Decimal.ROUND_HALF_UP)
+    .replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
 export function FinancialEditorView({ api, refresh }: ManagementProps) {
